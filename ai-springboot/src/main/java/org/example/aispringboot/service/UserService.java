@@ -12,7 +12,7 @@ import org.example.aispringboot.entity.User;
 import org.example.aispringboot.enumClass.UserType;
 import org.example.aispringboot.exception.BusinessException;
 import org.example.aispringboot.mapper.UserMapper;
-import org.example.aispringboot.service.convert.UserConvert;
+import org.example.aispringboot.service.convert.ClientConvert;
 import org.example.aispringboot.util.JwtTokenUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -55,9 +55,9 @@ public class UserService {
         }
         log.debug("判空、密码验证、用户状态均判断成功，准备生成token");
         String token= jwtTokenUtil.generateToken(user.getId(),user.getUsername(),user.getUserType());
-        UserLoginResponseDTO.UserDetailResponseDTO userInfo=UserConvert.entityToDetailResponse(user);
+        UserLoginResponseDTO.UserDetailResponseDTO userInfo=ClientConvert.entityToDetailResponse(user);
         log.debug("走到这里，用户信息和装填已经获取，准备装填并返回");
-        return UserConvert.buildLoginResponse(token,userInfo);
+        return ClientConvert.buildLoginResponse(token,userInfo);
     }
 
     public UserLoginResponseDTO.UserDetailResponseDTO register(UserRegisterCommandDTO commandDTO){
@@ -85,9 +85,9 @@ public class UserService {
         }
         commandDTO.setUserType(UserType.USER.getCode());
         String encodingPassword=passwordEncoder.encode(commandDTO.getPassword().trim());
-        User user=UserConvert.registerCommandToEntity(commandDTO,encodingPassword);
+        User user=ClientConvert.registerCommandToEntity(commandDTO,encodingPassword);
         userMapper.insert(user);
-        return UserConvert.entityToDetailResponse(user);
+        return ClientConvert.entityToDetailResponse(user);
     }
 
     public UserLoginResponseDTO.UserDetailResponseDTO getUserById(Long userId){
@@ -96,6 +96,6 @@ public class UserService {
             log.warn("查询用户不存在，userId={}",userId);
             throw new BusinessException("用户不存在");
         }
-        return UserConvert.entityToDetailResponse(user);
+        return ClientConvert.entityToDetailResponse(user);
     }
 }

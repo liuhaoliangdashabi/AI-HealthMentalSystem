@@ -189,7 +189,7 @@ const getRiskLevelText = (riskLevel) => {
 
 
 const formItem=[
-    {comp:'input',prop:'userId',label:'用户ID',placeholder:'请输入用户ID'},
+    {comp:'input',type:'number',prop:'userId',label:'用户ID',placeholder:'请输入用户ID'},
     {comp:'select',prop:'moodScreRange',label:'情绪评分',placeholder:'请选择评分范围',options:[
         {label:'低分(1-3分)',value:'1-3'},
         {label:'中分(4-6分)',value:'4-6'},

@@ -1,6 +1,7 @@
 package org.example.aispringboot.common;
 
 import com.auth0.jwt.exceptions.JWTVerificationException;
+import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.example.aispringboot.exception.BusinessException;
@@ -8,6 +9,7 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -32,16 +34,19 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Result<?>> handleMethodArgumentNotValid(MethodArgumentNotValidException e){
         String message=e.getBindingResult().getFieldErrors().stream()
-                .map(FieldError::getDefaultMessage)
+                .map(fe -> fe.isBindingFailure()
+                        ? "参数 "+fe.getField()+" 格式不正确"    // 类型转换 → 天书，换人话
+                        : fe.getDefaultMessage())               // 校验注解 → 你写的，直接用
                 .collect(Collectors.joining(", "));
-        log.warn("掉进了参数校验异常捕获，多半是参数不符合格式:{}",message);
+        log.warn("掉进了参数校验异常捕获:{}",message);
         return json(Result.error(ResultCode.PARAM_ERROR.getCode(),ResultCode.PARAM_ERROR.getMsg(),message));
     }
+
 
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<Result<?>> handleConstraintViolation(ConstraintViolationException e){
         String message=e.getConstraintViolations().stream()
-                .map(v->v.getMessage())
+                .map(ConstraintViolation::getMessage)
                 .collect(Collectors.joining(", "));
         log.warn("掉进了参数校验异常捕获（路径/查询参数）:{}",message);
         return json(Result.error(ResultCode.PARAM_ERROR.getCode(),ResultCode.PARAM_ERROR.getMsg(),message));

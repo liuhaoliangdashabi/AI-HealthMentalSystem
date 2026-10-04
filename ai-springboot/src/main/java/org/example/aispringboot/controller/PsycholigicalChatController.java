@@ -7,6 +7,7 @@ import org.example.aispringboot.AiService.PsychologicalSupportService;
 import org.example.aispringboot.AiService.StructOutPut;
 import org.example.aispringboot.DTO.command.ConsultationSectionCreateDTO;
 import org.example.aispringboot.DTO.command.ConsultationStreamDTO;
+import org.example.aispringboot.DTO.response.SessionEmotionResponseDTO;
 import org.example.aispringboot.common.Result;
 import org.example.aispringboot.common.ResultCode;
 import org.example.aispringboot.exception.BusinessException;
@@ -14,6 +15,9 @@ import org.example.aispringboot.util.JwtTokenUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -30,6 +34,18 @@ public class PsycholigicalChatController {
     private PsychologicalSupportService psychologicalSupportService;
     @Autowired
     private JwtTokenUtil jwtTokenUtil;
+
+//    @GetMapping("/sessions")
+//    public Result<> aa(){
+//
+//        return Result.success();
+//    }
+//
+//    @GetMapping("/sessions/{sessionId}")
+//    public Result<> bb(@PathVariable Long sessionId){
+//
+//        return Result.success();
+//    }
 
     @PostMapping("/session/start")
     public Result<StructOutPut.StreamChatSession> startSession(@Valid @RequestBody ConsultationSectionCreateDTO createDTO){
@@ -78,5 +94,17 @@ public class PsycholigicalChatController {
                         .build()
                 ))
                 .delayElements(Duration.ofMillis(50));
+    }
+
+    @DeleteMapping("/sessions/{id}")
+    public Result<Void> deleteSession(@PathVariable("id") Long sessionId){
+        log.debug("删除会话sessionId={}",sessionId);
+        return Result.success();
+    }
+
+    @GetMapping("/session/{sessionId}/emotion")
+    public Result<SessionEmotionResponseDTO> getSessionEmotion(@PathVariable String sessionId){
+        log.debug("查询会话情绪,sessionId={}",sessionId);
+        return Result.success(null);
     }
 }

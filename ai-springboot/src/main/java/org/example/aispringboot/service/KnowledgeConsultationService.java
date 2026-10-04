@@ -89,7 +89,7 @@ public class KnowledgeConsultationService {
             throw new BusinessException("会话不存在");
         }
         boolean isAdmin= UserType.ADMIN.getCode().equals(user.getUserType());
-        if(!isAdmin || !session.getUserId().equals(user.getId())){
+        if(!isAdmin && !session.getUserId().equals(user.getId())){
             log.warn("userId={},userType={}不是该次会话的参与者，无权访问该会话",user.getId(),user.getUserType());
             throw new BusinessException("用户无权访问该会话");
         }

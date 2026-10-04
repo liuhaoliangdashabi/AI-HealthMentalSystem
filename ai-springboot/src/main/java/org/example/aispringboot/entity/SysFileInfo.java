@@ -78,7 +78,7 @@ public class SysFileInfo {
     @Max(value = 1,message = "status只有0/1")
     private Integer status;
 
-    //这张表的时间列叫 create_time，别的表都叫 created_at
+    //时间
     @TableField("create_time")
     private LocalDateTime createTime;
 
