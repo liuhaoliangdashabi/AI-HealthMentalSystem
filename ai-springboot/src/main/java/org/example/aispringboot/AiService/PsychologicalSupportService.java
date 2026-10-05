@@ -15,10 +15,12 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+/**
+ * AI 对话专用服务。
+ * 注意：会话的【查询】不在这里 —— 那是 AB端/C端共用的，在 KnowledgeConsultationService。
+ */
 @Slf4j
 @Service
 public class PsychologicalSupportService {
@@ -75,7 +77,8 @@ public class PsychologicalSupportService {
                 //直接发布
                 ConsultationMessageResponseDTO lastMessage =
                         consultationMessageService.getLastMessageBySessionId(dbSessionId);
-                if(lastMessage!=null && lastMessage.getSenderType()==1 && userMessage.equals(lastMessage.getContent())){
+                if(lastMessage!=null && lastMessage.getSenderType()!=null
+                        && lastMessage.getSenderType()==1 && userMessage.equals(lastMessage.getContent())){
                     //发送者必须是用户的类型，不然AI检测到AI发的，无限递归的发了
                     isInitialMessage=true;
                 }
@@ -128,7 +131,8 @@ public class PsychologicalSupportService {
 
     }
 
-    public Long extractSessionId(String sessionId){
+    //session_123 → 123。格式不对返回 null
+    private Long extractSessionId(String sessionId){
         if(sessionId==null || !sessionId.startsWith("session_")){
             return null;
         }
@@ -138,6 +142,4 @@ public class PsychologicalSupportService {
             return null;
         }
     }
-
-
 }

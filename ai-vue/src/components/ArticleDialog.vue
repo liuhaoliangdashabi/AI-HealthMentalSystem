@@ -73,7 +73,6 @@
 import {ref,reactive,computed,nextTick,watch} from 'vue'
 import {ElMessage} from 'element-plus'
 import {uploadFile,createArticle,updateArticle} from '@/api/admin'
-import {fileBaseUrl} from '@/config/index.js'
 import RichTextEditor from '@/components/RichTextEditor.vue'
 const businessId=ref(null)
 const props=defineProps({
@@ -106,7 +105,7 @@ watch(()=>props.article,(newVal)=>{
         nextTick(()=>{
             Object.assign(formData,newVal)
             businessId.value=newVal.id
-            imgUrl.value=fileBaseUrl+newVal.coverImage
+            imgUrl.value=newVal.coverImageUrl||''
         })
         
     }
@@ -168,9 +167,9 @@ const handleUploadRequest=async({file})=>{//解构回调参数中的file
         businessId:businessId
     })
     console.log(fileRes)
-    //拼接路径
-    imgUrl.value=`${fileBaseUrl}${fileRes.filePath}`
-    formData.coverImage=fileRes.filePath//后端要的只是一个相对路径
+    //预览用后端返回的完整 URL；入库的仍然是相对路径
+    imgUrl.value=fileRes.fileUrl||''
+    formData.coverImage=fileRes.filePath
 }
 const handleRemove=()=>{
     imgUrl.value=''

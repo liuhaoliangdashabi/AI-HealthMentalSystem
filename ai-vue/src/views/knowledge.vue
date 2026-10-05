@@ -54,7 +54,9 @@ import {deleteArticle} from '@/api/admin'
 import ArticleDialog from '@/components/ArticleDialog.vue'
 import {ElMessage,ElMessageBox} from 'element-plus'
 
-const formItem=[
+//必须是 reactive：下面 onMounted 里要给 formItem[1] 动态塞 options，
+//普通数组改属性不会触发重新渲染，下拉框会是空的
+const formItem=reactive([
     {comp:'input',prop:'title',label:'标题',placeholder:'请输入文章标题'},
     {comp:'select',prop:'categoryId',label:'分类',placeholder:'请选择分类'},
     {comp:'select',prop:'status',label:'状态',placeholder:'请输入文章内容',options:[
@@ -62,7 +64,7 @@ const formItem=[
         {label:"已发布",value:'1'},
         {label:"已下线",value:'2'}
     ]}
-]
+])
 
 const handleChange=(page)=>{
     pagination.currentPage=page

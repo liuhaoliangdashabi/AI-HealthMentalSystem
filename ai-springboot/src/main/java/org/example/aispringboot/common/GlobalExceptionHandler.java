@@ -16,9 +16,12 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -107,9 +110,53 @@ public class GlobalExceptionHandler {
         return json(Result.error(ResultCode.TOKEN_INVALID.getCode(),ResultCode.TOKEN_INVALID.getMsg(),null));
     }
 
+    /**
+     * 客户端提前断开时抛的。
+     * SSE 流式响应期间，用户切会话/刷新/关标签页，服务端还在往一个已经断掉的连接里写，就会抛这个。
+     * 这是【正常现象】，不是服务端故障 —— 所以降成 warn 且不打堆栈，否则一刷屏就把真问题淹了。
+     */
+    @ExceptionHandler(AsyncRequestNotUsableException.class)
+    public void handleClientDisconnected(AsyncRequestNotUsableException e){
+        log.warn("客户端已断开，流式响应中止：{}",e.getMessage());
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Result<?>> handleException(Exception e){
-        log.error("系统异常", e);
+        log.error("系统异常：\n{}",briefStackTrace(e));
         return json(Result.error(ResultCode.SYSTEM_ERROR.getCode(), "系统繁忙，请联系管理员", null));
+    }
+
+    //==================================== 堆栈精简 ====================================
+    //e.printStackTrace() 动辄几百行，九成是框架内部调用，真正的出错点反而被埋了。
+    //这里只保留：异常名 + 消息 + 【我们自己的包】的调用帧 + Caused by 链。
+
+    private static final String APP_PACKAGE="org.example.aispringboot";
+    private static final int MAX_CAUSE_DEPTH=5;   //最多跟几层 Caused by
+    private static final int MAX_FRAMES=8;        //每层最多打几帧
+
+    private String briefStackTrace(Throwable e){
+        StringBuilder sb=new StringBuilder();
+        Throwable current=e;
+        for(int depth=0; current!=null && depth<MAX_CAUSE_DEPTH; depth++){
+            sb.append(depth==0?"":"\n  Caused by: ")
+                    .append(current.getClass().getSimpleName());
+            if(current.getMessage()!=null){
+                sb.append(": ").append(current.getMessage());
+            }
+
+            List<StackTraceElement> frames=Arrays.stream(current.getStackTrace())
+                    .filter(f -> f.getClassName().startsWith(APP_PACKAGE))
+                    .limit(MAX_FRAMES)
+                    .toList();
+
+            //整个异常都发生在框架里（比如 SQL 语法错），那就退而求其次给前 3 帧，不然一片空白
+            if(frames.isEmpty()){
+                frames=Arrays.stream(current.getStackTrace()).limit(3).toList();
+            }
+            frames.forEach(f -> sb.append("\n      at ").append(f));
+
+            current=current.getCause();
+        }
+        return sb.toString();
     }
 }

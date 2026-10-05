@@ -11,7 +11,12 @@ public class ArticleResponseDTO {
     private String id;
     private String title;
     private String content;
+    //库里存的是 OSS 的相对路径（objectKey），新增/修改时原样回传，别拿它当图片地址用
     private String coverImage;
+
+    //coverImage 换算出来的完整访问 URL，只用来显示。前端读这个
+    private String coverImageUrl;
+
     private Long categoryId;
     private Integer status;
     private Integer readCount;

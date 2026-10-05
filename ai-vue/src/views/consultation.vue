@@ -92,7 +92,7 @@
                             <div class="session-actions">
                                 <el-button text
                                     type="danger" size="small"
-                                    @click="handleDeleteSession(session.id)">
+                                    @click.stop="handleDeleteSession(session.id)">
                                     <el-icon><DeleteFilled/></el-icon>
                                 </el-button>
                             </div>
@@ -469,8 +469,12 @@ const loadSessionEmotion=(sessionId)=>{
     const id=sessionId.toString().startsWith('session_')?sessionId:`session_${sessionId}`
     getSessionEmotion(id).then(res=>{
         console.log(res)
-        currentEmotion.value=res
-    })
+        currentEmotion.value={
+            ...currentEmotion.value,
+            ...res,
+            improvementSuggestions:res?.improvementSuggestions??[]
+        }
+    }).catch(()=>{})
 }
 
 const formatRelativeTime=(timeStr)=>{

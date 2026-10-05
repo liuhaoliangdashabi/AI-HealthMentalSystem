@@ -207,9 +207,16 @@ const currentDetail=ref(null)
 const aiData=ref(null)
 
 const handleSearch=async(formData={})=>{
+    //前端传的是 "1-3" 这种字符串区间，后端要的是 minMoodScore / maxMoodScore，在这里拆开
+    const {moodScreRange,...rest}=formData
     const params={
         ...pagination,
-        ...formData
+        ...rest
+    }
+    if(moodScreRange){
+        const [min,max]=moodScreRange.split('-')
+        params.minMoodScore=Number(min)
+        params.maxMoodScore=Number(max)
     }
     const {records,total}= await getEmotionalPage(params)
     tableData.value=records
