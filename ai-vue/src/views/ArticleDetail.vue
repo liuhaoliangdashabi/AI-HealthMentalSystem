@@ -36,10 +36,10 @@
             <div class="diary-card">
                 <div class="title">正文内容</div>
                 <div class="content-wrapper" v-html="formatContent(articleDetail.content)"></div>
-                <div class="tags-content" v-if="articleDetail.tagArray?.length>0">
+                <div class="tags-content" v-if="tagList.length>0">
                     <h4>相关标签</h4>
                     <div class="tags-list">
-                        <el-tag v-for="tag in articleDetail.tagArray" :key="tag"
+                        <el-tag v-for="tag in tagList" :key="tag"
                             class="tags-item" type="info" effect="light">
                             {{ tag }}
                         </el-tag>
@@ -52,7 +52,7 @@
 
 
 <script setup>
-import {ref,reactive,onMounted} from 'vue'
+import {ref,computed,onMounted} from 'vue'
 import iconUrl from '@/assets/book.png'
 import {getKnowledgeDetail} from '@/api/frontend'
 import dayjs from 'dayjs'
@@ -63,6 +63,10 @@ const props=defineProps({
     id:String
 })
 const articleDetail=ref({})
+
+//后端直接给了拆好的 tagList（走 KnowledgeArticle.getTagList()）。
+//首次渲染时 articleDetail 还是空对象，所以要兜个底，否则模板里 .length 会抛异常
+const tagList=computed(()=>articleDetail.value?.tagList || [])
 
 const formatContent = (content) => {
   if (!content) return ''

@@ -96,7 +96,6 @@ org\example\aispringboot\mapper\EmotionDiaryMapper.class
 org\example\aispringboot\mapper\AiAnalysisTaskMapper.class
 org\example\aispringboot\config\OssClientConfig.class
 org\example\aispringboot\common\FileCleanupTask.class
-org\example\aispringboot\DTO\command\FileCommandDTO.class
 org\example\aispringboot\DTO\command\ArticleCommandDTO.class
 org\example\aispringboot\DTO\command\UserLoginCommandDTO.class
 org\example\aispringboot\DTO\response\AnalyticsOverviewResponseDTO$SystemOverview.class

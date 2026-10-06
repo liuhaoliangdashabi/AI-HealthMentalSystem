@@ -34,6 +34,7 @@ public class KnowledgeConvert {
                 .readCount(a.getReadCount())
                 .summary(a.getSummary())
                 .tags(a.getTags())
+                .tagList(a.getTagList())     //实体里早就写好的拆分方法，之前一直没人调
                 .publishedAt(a.getPublishedAt())
                 .updatedAt(a.getUpdatedAt())
                 .authorName(authorName)

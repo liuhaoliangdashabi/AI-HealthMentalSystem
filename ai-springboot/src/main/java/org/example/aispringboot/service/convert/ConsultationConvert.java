@@ -5,6 +5,7 @@ import org.example.aispringboot.DTO.response.ConsultationSessionResponseDTO;
 import org.example.aispringboot.entity.ConsultationMessage;
 import org.example.aispringboot.entity.ConsultationSession;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 
 /**
@@ -29,6 +30,9 @@ public class ConsultationConvert {
                 .lastMessageTime(lastMessageTime)
                 .lastEmotionAnalysis(session.getLastEmotionAnalysis())
                 .lastEmotionUpdatedAt(session.getLastEmotionUpdatedAt())
+                //会话时长 = 最后一条消息 − 开始时间。没有消息时为 null（前端会显示 0分钟）
+                .durationMinutes(session.getStartedAt()==null || lastMessageTime==null ? null
+                        : (int)Duration.between(session.getStartedAt(),lastMessageTime).toMinutes())
                 .build();
     }
 

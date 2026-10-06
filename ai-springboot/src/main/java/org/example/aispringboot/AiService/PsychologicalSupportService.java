@@ -33,6 +33,8 @@ public class PsychologicalSupportService {
     private ConsultationMessageService consultationMessageService;
     @Autowired
     private ConsultationSessionMapper consultationSessionMapper;
+    @Autowired
+    private EmotionAnalysisService emotionAnalysisService;
 
     public StructOutPut.StreamChatSession startSession(Long userId, ConsultationSectionCreateDTO createDTO){
         ConsultationSession consultationSession=consultationSessionsService.createSession(userId,createDTO);
@@ -118,6 +120,7 @@ public class PsychologicalSupportService {
                         //消息存储到表中
                         consultationMessageService.saveAiMessage(dbSessionId,completeRes,"openai");
                         sink.complete();
+                        emotionAnalysisService.analyzeAsync(dbSessionId);
                     })
                     .doOnError(error->{
                         log.error("流式对话失败",error);

@@ -106,7 +106,7 @@ public class PsycholigicalChatController {
                         .data("{}")
                         .build()
                 ))
-                .delayElements(Duration.ofMillis(50));
+                .delayElements(Duration.ofMillis(10));
     }
 
     @DeleteMapping("/sessions/{id}")

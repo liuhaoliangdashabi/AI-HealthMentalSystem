@@ -60,10 +60,19 @@ public class KnowledgeArticleService {
         qw.eq(scopedStatus!=null,
                 KnowledgeArticle::getStatus,scopedStatus);
 
+        //sortDirection 之前是"只写不读"——前端一直在传，后端一直忽略，永远只有降序。
+        //现在真正用上它（前端 C端推荐位传 readCount+desc，列表页传 publishedAt+desc）
         String sortField=query.getSortField()==null?"":query.getSortField();
+        boolean asc="asc".equalsIgnoreCase(query.getSortDirection());
         switch(sortField){
-            case "readCount"->qw.orderByDesc(KnowledgeArticle::getReadCount);
-            default         ->qw.orderByDesc(KnowledgeArticle::getPublishedAt);
+            case "readCount"->{
+                if(asc)qw.orderByAsc(KnowledgeArticle::getReadCount);
+                else   qw.orderByDesc(KnowledgeArticle::getReadCount);
+            }
+            default->{
+                if(asc)qw.orderByAsc(KnowledgeArticle::getPublishedAt);
+                else   qw.orderByDesc(KnowledgeArticle::getPublishedAt);
+            }
         }
 
         articleMapper.selectPage(page,qw);
@@ -110,6 +119,12 @@ public class KnowledgeArticleService {
     }
 
     public void putArticleStatus(String articleId, ArticleStatusCommandDTO status){
+        //★ 之前完全不校验 —— 前端传个 99 也会原样写进库。
+        //  正好把一直没人调用的 ArticleStatus.isValidCode 用上
+        if(!ArticleStatus.isValidCode(status.getStatus())){
+            log.warn("文章{}要改成非法状态：{}",articleId,status.getStatus());
+            throw new BusinessException("无效的文章状态");
+        }
         LambdaUpdateWrapper<KnowledgeArticle> uw=new LambdaUpdateWrapper<>();
         uw.eq(KnowledgeArticle::getId,articleId)
                 .set(KnowledgeArticle::getStatus, status.getStatus())
@@ -126,6 +141,14 @@ public class KnowledgeArticleService {
         if(!isAdmin && !ArticleStatus.PUBLISHED.getCode().equals(a.getStatus())){
             log.warn("userId={}无权查看未发布的文章{}，status={}",user.getId(),id,a.getStatus());
             throw new BusinessException("文章不存在");
+        }
+        //阅读量 +1：C端每看一次详情算一次，管理端预览不算。
+        //用 setSql 让数据库自己加，避免"读出来+1再写回去"在并发下丢更新。
+        if(!isAdmin){
+            articleMapper.update(null,new LambdaUpdateWrapper<KnowledgeArticle>()
+                    .eq(KnowledgeArticle::getId,id)
+                    .setSql("read_count = read_count + 1"));
+            a.setReadCount((a.getReadCount()==null?0:a.getReadCount())+1);   //让返回的 DTO 也是新值
         }
         User u=userMapper.selectById(a.getAuthorId());
         if(u==null)log.warn("文章{}的作者{}不存在，可能是脏数据",id,a.getAuthorId());

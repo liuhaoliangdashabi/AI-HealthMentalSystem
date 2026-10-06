@@ -1,3 +1,4 @@
+C:\Users\HP\Desktop\学习资料（真的学习资料）\AI-mentalHealthSystem-master\ai-springboot\src\main\java\org\example\aispringboot\AiService\EmotionAnalysisService.java
 C:\Users\HP\Desktop\学习资料（真的学习资料）\AI-mentalHealthSystem-master\ai-springboot\src\main\java\org\example\aispringboot\AiService\PromptManage.java
 C:\Users\HP\Desktop\学习资料（真的学习资料）\AI-mentalHealthSystem-master\ai-springboot\src\main\java\org\example\aispringboot\AiService\PsychologicalSupportService.java
 C:\Users\HP\Desktop\学习资料（真的学习资料）\AI-mentalHealthSystem-master\ai-springboot\src\main\java\org\example\aispringboot\AiService\StructOutPut.java
@@ -23,7 +24,6 @@ C:\Users\HP\Desktop\学习资料（真的学习资料）\AI-mentalHealthSystem-m
 C:\Users\HP\Desktop\学习资料（真的学习资料）\AI-mentalHealthSystem-master\ai-springboot\src\main\java\org\example\aispringboot\DTO\command\ConsultationStreamDTO.java
 C:\Users\HP\Desktop\学习资料（真的学习资料）\AI-mentalHealthSystem-master\ai-springboot\src\main\java\org\example\aispringboot\DTO\command\DiaryCommandDTO.java
 C:\Users\HP\Desktop\学习资料（真的学习资料）\AI-mentalHealthSystem-master\ai-springboot\src\main\java\org\example\aispringboot\DTO\command\DiaryPageQueryDTO.java
-C:\Users\HP\Desktop\学习资料（真的学习资料）\AI-mentalHealthSystem-master\ai-springboot\src\main\java\org\example\aispringboot\DTO\command\FileCommandDTO.java
 C:\Users\HP\Desktop\学习资料（真的学习资料）\AI-mentalHealthSystem-master\ai-springboot\src\main\java\org\example\aispringboot\DTO\command\UserLoginCommandDTO.java
 C:\Users\HP\Desktop\学习资料（真的学习资料）\AI-mentalHealthSystem-master\ai-springboot\src\main\java\org\example\aispringboot\DTO\command\UserRegisterCommandDTO.java
 C:\Users\HP\Desktop\学习资料（真的学习资料）\AI-mentalHealthSystem-master\ai-springboot\src\main\java\org\example\aispringboot\DTO\response\AnalyticsOverviewResponseDTO.java

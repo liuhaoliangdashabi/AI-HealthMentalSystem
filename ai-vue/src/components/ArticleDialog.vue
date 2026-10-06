@@ -104,6 +104,9 @@ watch(()=>props.article,(newVal)=>{
     if(newVal){
         nextTick(()=>{
             Object.assign(formData,newVal)
+            //后端给的 tagList 就是拆好的数组，直接拿来给编辑框。
+            //不填的话 tagArray 一直是空数组，提交时 tags=tagArray.join(',') 会把原标签整个清空
+            formData.tagArray = newVal.tagList || []
             businessId.value=newVal.id
             imgUrl.value=newVal.coverImageUrl||''
         })
@@ -164,7 +167,7 @@ const handleUploadRequest=async({file})=>{//解构回调参数中的file
     //UUID生成
     businessId.value=crypto.randomUUID()
     const fileRes=await uploadFile(file,{
-        businessId:businessId
+        businessId:businessId.value      //★ 必须 .value，传 ref 对象会被 FormData 变成 "[object Object]"
     })
     console.log(fileRes)
     //预览用后端返回的完整 URL；入库的仍然是相对路径
@@ -198,9 +201,13 @@ const loading=ref(false)
 const handleSubmit=()=>{
     if(!formRef.value) return
     formRef.value.validate((valid,fields)=>{
-        if(valid){
-            loading.value=true
+        //★ 校验不通过必须【直接返回】。原来只是 if(valid) 里设个 loading，
+        //  下面的提交代码在 if 外面，导致标题为空也会往后端发请求
+        //  （校验失败时 el-form 会把字段标红，本身就是提示）
+        if(!valid){
+            return
         }
+        loading.value=true
         console.log(formData,'formData')
         const submitData={...formData,tags:formData.tagArray.join(',')}
         submitData.id=businessId.value

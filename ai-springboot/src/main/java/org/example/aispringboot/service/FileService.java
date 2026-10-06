@@ -2,7 +2,6 @@ package org.example.aispringboot.service;
 
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
-import org.example.aispringboot.DTO.command.FileCommandDTO;
 import org.example.aispringboot.entity.SysFileInfo;
 import org.example.aispringboot.mapper.FileMapper;
 import org.example.aispringboot.util.OSSUtil;

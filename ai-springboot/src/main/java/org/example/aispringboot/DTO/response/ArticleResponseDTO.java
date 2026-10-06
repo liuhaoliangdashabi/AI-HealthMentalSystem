@@ -4,6 +4,7 @@ import lombok.Builder;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @Builder
@@ -22,6 +23,9 @@ public class ArticleResponseDTO {
     private Integer readCount;
     private String summary;
     private String tags;
+
+    //tags 拆好的数组，前端直接 v-for 用，不用自己 split
+    private List<String> tagList;
     private LocalDateTime publishedAt;
     private LocalDateTime updatedAt;
 

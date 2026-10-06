@@ -35,6 +35,9 @@ public class ConsultationSessionResponseDTO {
     // 最后一条消息时间
     private LocalDateTime lastMessageTime;
 
+    // 会话时长（分钟）= 最后一条消息时间 − 开始时间。没有消息时为 null
+    private Integer durationMinutes;
+
     // 最后情绪分析结果
     private String lastEmotionAnalysis;
 

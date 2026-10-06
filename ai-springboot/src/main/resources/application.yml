@@ -7,11 +7,19 @@ spring:
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+  #文件上传上限。不配的话 Spring Boot 默认只有 1MB ——
+  #那样 OSSUtil 里那个 10MB 校验会因为请求先被 MultipartResolver 拦掉而【永远执行不到】
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
   ai:
     openai:
       chat:
         options:
           model: deepseek-ai/DeepSeek-V3
+          #⚠️ 实测：加 tool-choice: required 会让模型【反复并发调用】工具
+          #   （6 条消息触发了 128 次工具调用），会造成死循环 + 刷爆 API 额度，所以不能用
           tool-calling:
             enabled: true
         completions-path: /v1/chat/completions

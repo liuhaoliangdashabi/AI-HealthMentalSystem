@@ -112,7 +112,7 @@
                 <div class="detail-section">
                     <h4>时间信息</h4>
                     <el-descriptions :column="2" border>
-                        <el-descriptions-item label="创建时间">{{ currentDetail.createAt }}</el-descriptions-item>
+                        <el-descriptions-item label="创建时间">{{ currentDetail.createdAt }}</el-descriptions-item>
                         <el-descriptions-item label="更新时间">{{ currentDetail.updatedAt }}</el-descriptions-item>
                     </el-descriptions>
                 </div>
@@ -191,9 +191,11 @@ const getRiskLevelText = (riskLevel) => {
 const formItem=[
     {comp:'input',type:'number',prop:'userId',label:'用户ID',placeholder:'请输入用户ID'},
     {comp:'select',prop:'moodScreRange',label:'情绪评分',placeholder:'请选择评分范围',options:[
+        //1-3 / 4-7 / 8-10：3+4+3 正好覆盖 1~10，不重叠也不遗漏
+        //（原来写的是 1-3 / 4-6 / 7-9，最大只到 9，打 10 分的日记任何一档都筛不出来）
         {label:'低分(1-3分)',value:'1-3'},
-        {label:'中分(4-6分)',value:'4-6'},
-        {label:'高分(7-9分)',value:'7-9'}
+        {label:'中分(4-7分)',value:'4-7'},
+        {label:'高分(8-10分)',value:'8-10'}
     ]}
 ]
 const tableData=ref([])
@@ -224,7 +226,7 @@ const handleSearch=async(formData={})=>{
 }
 const handleDelete=(row)=>{
     ElMessageBox.confirm(
-        `确认删除${row.title}吗？`,
+        `确认删除${row.diaryDate}吗？`,
         '确认',{
             confirmButtonText:'确定',
             cancelButtonText:'取消',
