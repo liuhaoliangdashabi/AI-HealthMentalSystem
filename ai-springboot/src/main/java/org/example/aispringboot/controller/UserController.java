@@ -9,6 +9,7 @@ import org.example.aispringboot.DTO.command.UserLoginCommandDTO;
 import org.example.aispringboot.DTO.command.UserRegisterCommandDTO;
 import org.example.aispringboot.DTO.response.UserLoginResponseDTO;
 import org.example.aispringboot.common.Result;
+import org.example.aispringboot.service.DiaryService;
 import org.example.aispringboot.service.UserService;
 import org.example.aispringboot.util.JwtTokenUtil;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,6 +22,8 @@ import org.springframework.web.bind.annotation.*;
 public class UserController {
     @Autowired
     private UserService userService;
+    @Autowired
+    private DiaryService diaryService;
     @Resource
     private JwtTokenUtil jwtTokenUtil;
 
@@ -55,6 +58,7 @@ public class UserController {
     public Result<Void> addEmotionDiary(@Valid @RequestBody DiaryCommandDTO commandDTO,
                                         @AuthenticationPrincipal UserLoginResponseDTO.UserDetailResponseDTO user){
         log.debug("Id={}提交情绪日记",user.getId());
+        diaryService.addEmotionDiary(commandDTO,user.getId());
         return Result.success();
     }
 }

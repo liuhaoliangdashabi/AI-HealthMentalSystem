@@ -101,7 +101,25 @@ const router=createRouter({
 router.beforeEach((to,from,next)=>{
     const token=localStorage.getItem('token')
     if(token){
-        const userInfo=JSON.parse(localStorage.getItem('userInfo'))
+        //userInfo 有可能丢（手动清了缓存、或者只写进了 token）
+        //JSON.parse(null) 返回 null → 直接取 .userType 会 TypeError，把整个守卫搞崩 → 所有跳转失效
+        let userInfo=null
+        try{
+            userInfo=JSON.parse(localStorage.getItem('userInfo'))
+        }catch(e){
+            userInfo=null
+        }
+        if(!userInfo||!userInfo.userType){
+            //token 在但用户信息没了 —— 等于没登录，清掉残留
+            localStorage.removeItem('token')
+            localStorage.removeItem('userInfo')
+            if(to.path.startsWith('/back')){
+                next('/auth/login')
+            }else{
+                next()
+            }
+            return
+        }
         if(userInfo.userType==2){
             if(to.path.startsWith('/back')){
                 next()

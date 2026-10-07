@@ -16,8 +16,8 @@
                     退出登录
                 </el-button>
                 <template v-else>
-                    <router-link to="auth/login" class="nav-link">登录</router-link>
-                    <router-link to="auth/register" class="nav-link">
+                    <router-link to="/auth/login" class="nav-link">登录</router-link>
+                    <router-link to="/auth/register" class="nav-link">
                         <el-button type="primary">注册</el-button>
                     </router-link>
                 </template>

@@ -15,7 +15,7 @@ public class ChatClientConfig {
     @Bean
     public ChatMemory chatMemory(){
         return MessageWindowChatMemory.builder()
-                .maxMessages(20) //保留最近20条消息
+                .maxMessages(10) //保留最近10条消息
                 .build();
     }
 
@@ -24,6 +24,13 @@ public class ChatClientConfig {
         return ChatClient.builder(openAiChatModel)
                 .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory()).build())
                 .defaultSystem(PromptManage.PSYCHOLOGICAL_SUPPORT_SYSTEM_PROMPT)
+                .build();
+    }
+
+    @Bean("emotion-analyzer")
+    public ChatClient emotionAnalyzerClient(OpenAiChatModel openAiChatModel){
+        return ChatClient.builder(openAiChatModel)
+                .defaultSystem(PromptManage.EMOTION_ANALYSIS_SYSTEM_PROMPT)
                 .build();
     }
 }

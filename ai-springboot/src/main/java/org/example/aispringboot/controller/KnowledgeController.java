@@ -7,6 +7,7 @@ import org.example.aispringboot.DTO.command.*;
 import org.example.aispringboot.DTO.response.*;
 import org.example.aispringboot.common.Result;
 import org.example.aispringboot.service.*;
+import org.example.aispringboot.util.OSSUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -24,13 +25,13 @@ public class KnowledgeController {
     @Autowired
     private KnowledgeArticleService articleService;
     @Autowired
-    private KnowledgeConsultationService consultationService;
-    @Autowired
     private DiaryService diaryService;
     @Autowired
     private AnalyticsService analyticsService;
     @Autowired
     private FileService fileService;
+    @Autowired
+    private OSSUtil ossUtil;
 
     //--------------------------------category相关
 
@@ -62,9 +63,10 @@ public class KnowledgeController {
     //-----------------------------------Article相关
     @GetMapping("/knowledge/article/page")
     public Result<IPage<ArticleResponseDTO>> articlePage(
-            @Valid ArticlePageQueryDTO pageQueryDTO){
-        log.debug("分页查询文章列表");
-        IPage<ArticleResponseDTO> articleList=articleService.selectPage(pageQueryDTO);
+            @Valid ArticlePageQueryDTO pageQueryDTO,
+            @AuthenticationPrincipal UserLoginResponseDTO.UserDetailResponseDTO user){
+        log.debug("Id={}分页查询文章列表",user.getId());
+        IPage<ArticleResponseDTO> articleList=articleService.selectPage(pageQueryDTO,user);
         return Result.success(articleList);
     }
 
@@ -91,7 +93,7 @@ public class KnowledgeController {
     public Result<ArticleResponseDTO> getArticleDetail(@PathVariable String id,
                                          @AuthenticationPrincipal UserLoginResponseDTO.UserDetailResponseDTO user){
         log.debug("Id={}获取文章articleId={}详情",user.getId(),id);
-        ArticleResponseDTO responseDTO=articleService.getArticleDetail(id);
+        ArticleResponseDTO responseDTO=articleService.getArticleDetail(id,user);
         return Result.success(responseDTO);
     }
 
@@ -114,20 +116,7 @@ public class KnowledgeController {
 
 
     //-------------------------------------Consultation相关
-    @GetMapping("/psychological-chat/sessions")
-    public Result<IPage<ConsultationSessionResponseDTO>> getConsultationPage(@Valid ConsultationPageQueryDTO queryDTO){
-        log.debug("查询心理会话列表，currentPage={}，size={}",queryDTO.getCurrentPage(),queryDTO.getSize());
-        IPage<ConsultationSessionResponseDTO> responseDTO=consultationService.getConsultationPage(queryDTO);
-        return Result.success(responseDTO);
-    }
-
-    @GetMapping("/psychological-chat/sessions/{sessionId}/messages")
-    public Result<List<ConsultationMessageResponseDTO>> getConsultationDetail(@PathVariable Long sessionId,
-                                                                              @AuthenticationPrincipal UserLoginResponseDTO.UserDetailResponseDTO user){
-        log.debug("查询心理会话消息,sessionId={}",sessionId);
-        List<ConsultationMessageResponseDTO> responseDTO=consultationService.getConsultationDetail(sessionId,user);
-        return Result.success(responseDTO);
-    }
+    // 会话列表、会话消息已移到 PsycholigicalChatController
 
     //-----------------------------------Emotion-diary相关
     @GetMapping("/emotion-diary/admin/page")
@@ -146,8 +135,9 @@ public class KnowledgeController {
     }
 
     //-------------------------------------File相关
+    //返回两个：filePath 是入库用的相对路径，fileUrl 是前端预览用的完整地址
     @PostMapping("/file/upload")
-    public Result<Map.Entry<String,String>> uploadFile(@RequestParam("file") MultipartFile file,
+    public Result<Map<String,String>> uploadFile(@RequestParam("file") MultipartFile file,
                                         @RequestParam("businessType")String businessType,
                                         @RequestParam(value="businessId",required=false)String businessId,
                                         @RequestParam(value="businessField",required=false)String businessField,
@@ -155,7 +145,9 @@ public class KnowledgeController {
         log.debug("Id={}正在上传文件，businessType={},businessId={},businessField={}",
                 user.getId(),businessType,businessId,businessField);
         String objectKey=fileService.upload(file,businessType,businessId,businessField, user.getId());
-        return Result.success(Map.entry("filePath",objectKey));
+        return Result.success(Map.of(
+                "filePath",objectKey,
+                "fileUrl",ossUtil.getUrl(objectKey)));
     }
 
     //-----------------------------------Data-analytics相关

@@ -1,20 +1,17 @@
 package org.example.aispringboot.service;
 
-import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.example.aispringboot.DTO.command.UserLoginCommandDTO;
 import org.example.aispringboot.DTO.command.UserRegisterCommandDTO;
 import org.example.aispringboot.DTO.response.UserLoginResponseDTO;
-import org.example.aispringboot.common.Result;
 import org.example.aispringboot.entity.User;
 import org.example.aispringboot.enumClass.UserType;
 import org.example.aispringboot.exception.BusinessException;
 import org.example.aispringboot.mapper.UserMapper;
-import org.example.aispringboot.service.convert.ClientConvert;
+import org.example.aispringboot.service.convert.UserConvert;
 import org.example.aispringboot.util.JwtTokenUtil;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 @Slf4j
@@ -55,9 +52,9 @@ public class UserService {
         }
         log.debug("判空、密码验证、用户状态均判断成功，准备生成token");
         String token= jwtTokenUtil.generateToken(user.getId(),user.getUsername(),user.getUserType());
-        UserLoginResponseDTO.UserDetailResponseDTO userInfo=ClientConvert.entityToDetailResponse(user);
+        UserLoginResponseDTO.UserDetailResponseDTO userInfo= UserConvert.entityToDetailResponse(user);
         log.debug("走到这里，用户信息和装填已经获取，准备装填并返回");
-        return ClientConvert.buildLoginResponse(token,userInfo);
+        return UserConvert.buildLoginResponse(token,userInfo);
     }
 
     public UserLoginResponseDTO.UserDetailResponseDTO register(UserRegisterCommandDTO commandDTO){
@@ -85,9 +82,9 @@ public class UserService {
         }
         commandDTO.setUserType(UserType.USER.getCode());
         String encodingPassword=passwordEncoder.encode(commandDTO.getPassword().trim());
-        User user=ClientConvert.registerCommandToEntity(commandDTO,encodingPassword);
+        User user= UserConvert.registerCommandToEntity(commandDTO,encodingPassword);
         userMapper.insert(user);
-        return ClientConvert.entityToDetailResponse(user);
+        return UserConvert.entityToDetailResponse(user);
     }
 
     public UserLoginResponseDTO.UserDetailResponseDTO getUserById(Long userId){
@@ -96,6 +93,6 @@ public class UserService {
             log.warn("查询用户不存在，userId={}",userId);
             throw new BusinessException("用户不存在");
         }
-        return ClientConvert.entityToDetailResponse(user);
+        return UserConvert.entityToDetailResponse(user);
     }
 }

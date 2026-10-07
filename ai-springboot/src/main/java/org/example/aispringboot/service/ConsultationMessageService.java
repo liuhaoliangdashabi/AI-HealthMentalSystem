@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import org.example.aispringboot.DTO.response.ConsultationMessageResponseDTO;
 import org.example.aispringboot.entity.ConsultationMessage;
 import org.example.aispringboot.mapper.ConsultationMessageMapper;
+import org.example.aispringboot.service.convert.ConsultationConvert;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -14,13 +15,13 @@ public class ConsultationMessageService {
     @Autowired
     private ConsultationMessageMapper consultationMessageMapper;
 
-    public ConsultationMessage saveUserMessage(Long sessionId,String content,String emotion_tag){
+    public ConsultationMessage saveUserMessage(Long sessionId,String content,String emotionTag){
         ConsultationMessage userMessage=ConsultationMessage.builder()
                 .sessionId(sessionId)
                 .senderType(1)//一开始就是用户
                 .messageType(1)
                 .content(content)
-                .emotionTag(emotion_tag)
+                .emotionTag(emotionTag)
                 .createdAt(LocalDateTime.now())
                 .build();
         consultationMessageMapper.insert(userMessage);
@@ -57,36 +58,6 @@ public class ConsultationMessageService {
                 .last("limit 1");
 
         ConsultationMessage lastMessage=consultationMessageMapper.selectOne(queryWrapper);
-        return lastMessage!=null?convertToResponseDTO(lastMessage):null;
-    }
-
-    private ConsultationMessageResponseDTO convertToResponseDTO(ConsultationMessage message) {
-        if (message == null) {
-            return null;
-        }
-
-        // 手动逐字段赋值，确保转换的准确性和可控性
-        ConsultationMessageResponseDTO responseDTO =ConsultationMessageResponseDTO.builder()
-                .id(message.getId())
-                .sessionId(message.getSessionId())
-                .senderType(message.getSenderType())
-                .messageType(message.getMessageType())
-                .content(message.getContent())
-                .emotionTag(message.getEmotionTag())
-                .aiModel(message.getAiModel())
-                .createdAt(message.getCreatedAt())
-                .senderTypeDesc(message.getSenderTypeDesc())
-                .messageTypeDesc(message.getMessageTypeDesc())
-                .build();
-        responseDTO.calculateContentLength();
-
-        // 设置描述字段（通过实体方法获取）
-        responseDTO.setSenderTypeDesc(message.getSenderTypeDesc());
-        responseDTO.setMessageTypeDesc(message.getMessageTypeDesc());
-
-        // 计算消息长度
-        responseDTO.calculateContentLength();
-
-        return responseDTO;
+        return lastMessage!=null?ConsultationConvert.messageToResponse(lastMessage):null;
     }
 }

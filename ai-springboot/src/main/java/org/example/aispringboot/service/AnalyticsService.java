@@ -15,7 +15,7 @@ import org.example.aispringboot.mapper.ConsultationMessageMapper;
 import org.example.aispringboot.mapper.ConsultationSessionMapper;
 import org.example.aispringboot.mapper.EmotionDiaryMapper;
 import org.example.aispringboot.mapper.UserMapper;
-import org.example.aispringboot.service.convert.KnowledgeConvert;
+import org.example.aispringboot.service.convert.AnalyticsConvert;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -107,19 +107,19 @@ public class AnalyticsService {
             dayActiveUserIds.addAll(diaryUserIds);
             dayActiveUserIds.addAll(consultationUserIds);
 
-            emotionTrend.add(KnowledgeConvert.toEmotionTrendItem(d, dayDiaries));
-            dailyTrend.add(KnowledgeConvert.toDailyTrendItem(d, daySessions));
-            userActivity.add(KnowledgeConvert.toUserActivityItem(d, dayActiveUserIds,
+            emotionTrend.add(AnalyticsConvert.toEmotionTrendItem(d, dayDiaries));
+            dailyTrend.add(AnalyticsConvert.toDailyTrendItem(d, daySessions));
+            userActivity.add(AnalyticsConvert.toUserActivityItem(d, dayActiveUserIds,
                     newUsersByDate.getOrDefault(d, List.of()), diaryUserIds, consultationUserIds));
         }
 
-        SystemOverview systemOverview = KnowledgeConvert.toSystemOverview(
+        SystemOverview systemOverview = AnalyticsConvert.toSystemOverview(
                 users.size(), activeUserIds.size(), diaries.size(), todayNewDiaries,
                 sessions.size(), todayNewSessions, avgMoodScore);
-        ConsultationStats consultationStats = KnowledgeConvert.toConsultationStats(
+        ConsultationStats consultationStats = AnalyticsConvert.toConsultationStats(
                 sessions.size(), avgDurationMinutes, dailyTrend);
 
-        return KnowledgeConvert.toResponse(systemOverview, consultationStats,
+        return AnalyticsConvert.toResponse(systemOverview, consultationStats,
                 emotionTrend, userActivity);
     }
 

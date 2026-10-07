@@ -16,11 +16,14 @@ import org.example.aispringboot.common.Result;
 import org.example.aispringboot.entity.KnowledgeArticle;
 import org.example.aispringboot.entity.KnowledgeCategory;
 import org.example.aispringboot.entity.User;
+import org.example.aispringboot.enumClass.ArticleStatus;
+import org.example.aispringboot.enumClass.UserType;
 import org.example.aispringboot.exception.BusinessException;
 import org.example.aispringboot.mapper.KnowledgeArticleMapper;
 import org.example.aispringboot.mapper.KnowledgeCategoryMapper;
 import org.example.aispringboot.mapper.UserMapper;
 import org.example.aispringboot.service.convert.KnowledgeConvert;
+import org.example.aispringboot.util.OSSUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.stereotype.Service;
@@ -39,21 +42,37 @@ public class KnowledgeArticleService {
     private KnowledgeCategoryMapper categoryMapper;
     @Autowired
     private UserMapper userMapper;
+    @Autowired
+    private OSSUtil ossUtil;
 
-    public IPage<ArticleResponseDTO> selectPage(ArticlePageQueryDTO query) {
+    public IPage<ArticleResponseDTO> selectPage(ArticlePageQueryDTO query,
+                                                UserLoginResponseDTO.UserDetailResponseDTO user) {
+        boolean isAdmin= UserType.ADMIN.getCode().equals(user.getUserType());
+        //AB端按前端传的 status 过滤；C端【强制】只看已发布 —— 不管前端传什么，防止自己拼参数绕过
+        Integer scopedStatus=isAdmin?query.getStatus():ArticleStatus.PUBLISHED.getCode();
+
         Page<KnowledgeArticle> page=new Page<>(query.getCurrentPage(),query.getSize());
         LambdaQueryWrapper<KnowledgeArticle> qw=new LambdaQueryWrapper<>();
         qw.like(query.getTitle()!=null && !query.getTitle().isEmpty(),
                 KnowledgeArticle::getTitle,query.getTitle());
         qw.eq(query.getCategoryId()!=null,
                 KnowledgeArticle::getCategoryId,query.getCategoryId());
-        qw.eq(query.getStatus()!=null,
-                KnowledgeArticle::getStatus,query.getStatus());
+        qw.eq(scopedStatus!=null,
+                KnowledgeArticle::getStatus,scopedStatus);
 
+        //sortDirection 之前是"只写不读"——前端一直在传，后端一直忽略，永远只有降序。
+        //现在真正用上它（前端 C端推荐位传 readCount+desc，列表页传 publishedAt+desc）
         String sortField=query.getSortField()==null?"":query.getSortField();
+        boolean asc="asc".equalsIgnoreCase(query.getSortDirection());
         switch(sortField){
-            case "readCount"->qw.orderByDesc(KnowledgeArticle::getReadCount);
-            default         ->qw.orderByDesc(KnowledgeArticle::getPublishedAt);
+            case "readCount"->{
+                if(asc)qw.orderByAsc(KnowledgeArticle::getReadCount);
+                else   qw.orderByDesc(KnowledgeArticle::getReadCount);
+            }
+            default->{
+                if(asc)qw.orderByAsc(KnowledgeArticle::getPublishedAt);
+                else   qw.orderByDesc(KnowledgeArticle::getPublishedAt);
+            }
         }
 
         articleMapper.selectPage(page,qw);
@@ -85,9 +104,9 @@ public class KnowledgeArticleService {
         if(!categoryIds.isEmpty())log.warn("这些作者id不存在，可能是脏数据:{}",categoryIds);
 
 
-        return page.convert(a-> KnowledgeConvert.articleToResponse(
+        return page.convert(a-> withCoverUrl(KnowledgeConvert.articleToResponse(
                     a,authorNameMap.get(a.getAuthorId()),
-                    categoryNameMap.get(a.getCategoryId()))
+                    categoryNameMap.get(a.getCategoryId())))
         );
     }
 
@@ -100,6 +119,12 @@ public class KnowledgeArticleService {
     }
 
     public void putArticleStatus(String articleId, ArticleStatusCommandDTO status){
+        //★ 之前完全不校验 —— 前端传个 99 也会原样写进库。
+        //  正好把一直没人调用的 ArticleStatus.isValidCode 用上
+        if(!ArticleStatus.isValidCode(status.getStatus())){
+            log.warn("文章{}要改成非法状态：{}",articleId,status.getStatus());
+            throw new BusinessException("无效的文章状态");
+        }
         LambdaUpdateWrapper<KnowledgeArticle> uw=new LambdaUpdateWrapper<>();
         uw.eq(KnowledgeArticle::getId,articleId)
                 .set(KnowledgeArticle::getStatus, status.getStatus())
@@ -107,15 +132,30 @@ public class KnowledgeArticleService {
         articleMapper.update(uw);
     }
 
-    public ArticleResponseDTO getArticleDetail(String id) {
+    public ArticleResponseDTO getArticleDetail(String id,
+                                               UserLoginResponseDTO.UserDetailResponseDTO user) {
         KnowledgeArticle a=articleMapper.selectById(id);
-        if(a==null)throw new BusinessException("id={}文章不存在");
+        if(a==null)throw new BusinessException("文章不存在");
+        //非管理员只能看已发布的。文案统一成"不存在"，不泄露草稿的存在
+        boolean isAdmin= UserType.ADMIN.getCode().equals(user.getUserType());
+        if(!isAdmin && !ArticleStatus.PUBLISHED.getCode().equals(a.getStatus())){
+            log.warn("userId={}无权查看未发布的文章{}，status={}",user.getId(),id,a.getStatus());
+            throw new BusinessException("文章不存在");
+        }
+        //阅读量 +1：C端每看一次详情算一次，管理端预览不算。
+        //用 setSql 让数据库自己加，避免"读出来+1再写回去"在并发下丢更新。
+        if(!isAdmin){
+            articleMapper.update(null,new LambdaUpdateWrapper<KnowledgeArticle>()
+                    .eq(KnowledgeArticle::getId,id)
+                    .setSql("read_count = read_count + 1"));
+            a.setReadCount((a.getReadCount()==null?0:a.getReadCount())+1);   //让返回的 DTO 也是新值
+        }
         User u=userMapper.selectById(a.getAuthorId());
         if(u==null)log.warn("文章{}的作者{}不存在，可能是脏数据",id,a.getAuthorId());
         KnowledgeCategory c=categoryMapper.selectById(a.getCategoryId());
         if(c==null)log.warn("文章{}的分类{}不存在，可能是脏数据",id,a.getCategoryId());
-        return KnowledgeConvert.articleToResponse(a,u==null?null:u.getDisplayName(),
-                c==null?null:c.getCategoryName());
+        return withCoverUrl(KnowledgeConvert.articleToResponse(a,u==null?null:u.getDisplayName(),
+                c==null?null:c.getCategoryName()));
     }
 
     public void putArticleDetail(String articleId, @Valid ArticleCommandDTO commandDTO) {
@@ -134,6 +174,13 @@ public class KnowledgeArticleService {
             log.warn("文章{}不存在",articleId);
             throw new BusinessException("文章不存在");
         }
+    }
+
+    //coverImage 存的是 OSS 相对路径，这里换算成能直接访问的完整 URL 填进 coverImageUrl
+    //（历史数据里可能已经存了完整 URL，OSSUtil.getUrl 会原样返回，不会重复拼）
+    private ArticleResponseDTO withCoverUrl(ArticleResponseDTO dto){
+        dto.setCoverImageUrl(ossUtil.getUrl(dto.getCoverImage()));
+        return dto;
     }
 }
 

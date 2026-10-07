@@ -5,20 +5,29 @@ import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.example.aispringboot.exception.BusinessException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -107,9 +116,130 @@ public class GlobalExceptionHandler {
         return json(Result.error(ResultCode.TOKEN_INVALID.getCode(),ResultCode.TOKEN_INVALID.getMsg(),null));
     }
 
+    /**
+     * POJO 查询参数（@ModelAttribute 绑定）失败时抛的。
+     * 之前只 import 了没写 handler —— 一旦给查询 DTO 加上校验注解，就会掉进兜底变成 500。
+     * 注意 MethodArgumentNotValidException 是它的子类，所以上面那个更具体的 handler 优先。
+     */
+    @ExceptionHandler(BindException.class)
+    public ResponseEntity<Result<?>> handleBind(BindException e){
+        String message=e.getBindingResult().getFieldErrors().stream()
+                .map(fe -> fe.isBindingFailure()
+                        ? "参数 "+fe.getField()+" 格式不正确"
+                        : String.valueOf(fe.getDefaultMessage()))
+                .collect(Collectors.joining(", "));
+        log.warn("掉进了参数绑定异常捕获:{}",message);
+        return json(Result.error(ResultCode.PARAM_ERROR.getCode(),ResultCode.PARAM_ERROR.getMsg(),message));
+    }
+
+    /**
+     * 上传文件超过 spring.servlet.multipart.max-file-size 时抛。
+     * 注意：它在请求进入 Controller 之前就抛了 —— OSSUtil 里那个 10MB 校验根本轮不到执行，
+     * 所以两边的上限必须配成一致（见 application.yml）。
+     */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<Result<?>> handleMaxUploadSize(MaxUploadSizeExceededException e){
+        log.warn("上传文件超过大小限制");
+        return json(Result.error(ResultCode.FILE_SIZE_EXCEEDED.getCode(),
+                ResultCode.FILE_SIZE_EXCEEDED.getMsg()+"，请压缩后再上传",null));
+    }
+
+    //multipart 请求本身格式不对（比如 boundary 缺失、不是 multipart 却硬发文件）
+    @ExceptionHandler(MultipartException.class)
+    public ResponseEntity<Result<?>> handleMultipart(MultipartException e){
+        log.warn("multipart 请求解析失败：{}",e.getMessage());
+        return json(Result.error(ResultCode.FILE_UPLOAD_FAILED.getCode(),"文件上传请求格式不正确",null));
+    }
+
+    /**
+     * Content-Type 和服务端要的不一致。
+     * 典型：往 @RequestBody(JSON) 的接口发 form-data，或者往 multipart 接口发 JSON。
+     */
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<Result<?>> handleMediaTypeNotSupported(HttpMediaTypeNotSupportedException e){
+        log.warn("Content-Type 不支持：收到 {}，支持 {}",e.getContentType(),e.getSupportedMediaTypes());
+        return json(Result.error(ResultCode.PARAM_INVALID.getCode(),"请求格式不支持，请检查 Content-Type",null));
+    }
+
+    /**
+     * 非唯一键的完整性约束：外键、非空、字段超长、CHECK 约束等。
+     * （唯一键冲突被上面的 DuplicateKeyException 接走）
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<Result<?>> handleDataIntegrity(DataIntegrityViolationException e){
+        //★ 故意不打 e.getMessage() —— 它经常带着具体的字段值（外键值、超长内容），属于数据外泄
+        log.warn("数据库完整性约束冲突，请检查外键 / 非空 / 字段长度限制");
+        return json(Result.error(ResultCode.PARAM_ERROR.getCode(),"数据不符合约束，请检查后重试",null));
+    }
+
+    /**
+     * 方法级权限校验失败（@PreAuthorize 等）抛的。
+     * 现在项目里还没加这类注解，属于预防性处理 —— 不加的话会掉进兜底，把 403 误报成 500。
+     * ★ 用 A0300 而不是 A0301 —— 前端把 A0301 当成"需要重新登录"，会把用户踢下线。
+     */
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<Result<?>> handleAccessDenied(AccessDeniedException e){
+        log.warn("权限不足：{}",e.getMessage());
+        return json(Result.error(ResultCode.AUTHORIZED_ERROR.getCode(),"没有权限执行该操作",null));
+    }
+
+    /**
+     * 客户端提前断开时抛的。
+     * SSE 流式响应期间，用户切会话/刷新/关标签页，服务端还在往一个已经断掉的连接里写，就会抛这个。
+     * 这是【正常现象】，不是服务端故障 —— 所以降成 warn 且不打堆栈，否则一刷屏就把真问题淹了。
+     */
+    @ExceptionHandler(AsyncRequestNotUsableException.class)
+    public void handleClientDisconnected(AsyncRequestNotUsableException e){
+        log.warn("客户端已断开，流式响应中止：{}",e.getMessage());
+    }
+
+    /**
+     * 客户端中途断开时，写响应体有时【直接抛 IOException】，而不是被包成 AsyncRequestNotUsableException。
+     * 消息里的"主机中的软件中止了一个已建立的连接"是 Windows 的本地化文案，靠它判断不可靠，
+     * 所以这里统一降成 warn —— 但保留精简堆栈，万一真是别的 IO 问题还能看见。
+     */
+    @ExceptionHandler(IOException.class)
+    public void handleIOException(IOException e){
+        log.warn("响应写出失败（多半是客户端断开）：\n{}",briefStackTrace(e));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Result<?>> handleException(Exception e){
-        log.error("系统异常", e);
+        log.error("系统异常：\n{}",briefStackTrace(e));
         return json(Result.error(ResultCode.SYSTEM_ERROR.getCode(), "系统繁忙，请联系管理员", null));
+    }
+
+    //==================================== 堆栈精简 ====================================
+    //e.printStackTrace() 动辄几百行，九成是框架内部调用，真正的出错点反而被埋了。
+    //这里只保留：异常名 + 消息 + 【我们自己的包】的调用帧 + Caused by 链。
+
+    private static final String APP_PACKAGE="org.example.aispringboot";
+    private static final int MAX_CAUSE_DEPTH=5;   //最多跟几层 Caused by
+    private static final int MAX_FRAMES=8;        //每层最多打几帧
+
+    private String briefStackTrace(Throwable e){
+        StringBuilder sb=new StringBuilder();
+        Throwable current=e;
+        for(int depth=0; current!=null && depth<MAX_CAUSE_DEPTH; depth++){
+            sb.append(depth==0?"":"\n  Caused by: ")
+                    .append(current.getClass().getSimpleName());
+            if(current.getMessage()!=null){
+                sb.append(": ").append(current.getMessage());
+            }
+
+            List<StackTraceElement> frames=Arrays.stream(current.getStackTrace())
+                    .filter(f -> f.getClassName().startsWith(APP_PACKAGE))
+                    .limit(MAX_FRAMES)
+                    .toList();
+
+            //整个异常都发生在框架里（比如 SQL 语法错），那就退而求其次给前 3 帧，不然一片空白
+            if(frames.isEmpty()){
+                frames=Arrays.stream(current.getStackTrace()).limit(3).toList();
+            }
+            frames.forEach(f -> sb.append("\n      at ").append(f));
+
+            current=current.getCause();
+        }
+        return sb.toString();
     }
 }

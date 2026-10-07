@@ -1,17 +1,17 @@
 package org.example.aispringboot.service.convert;
 
-import lombok.extern.slf4j.Slf4j;
-import org.example.aispringboot.DTO.command.DiaryCommandDTO;
 import org.example.aispringboot.DTO.command.UserRegisterCommandDTO;
 import org.example.aispringboot.DTO.response.UserLoginResponseDTO;
-import org.example.aispringboot.entity.EmotionDiary;
 import org.example.aispringboot.entity.User;
 import org.example.aispringboot.enumClass.UserStatus;
 
 import java.time.LocalDateTime;
 
-@Slf4j
-public class ClientConvert {
+/**
+ * 用户模块的转换方法：注册、登录、用户详情。
+ */
+public class UserConvert {
+
     /**
      * User实体转换为详情响应DTO
      * @param user User实体
@@ -52,7 +52,7 @@ public class ClientConvert {
                 .build();
     }
 
-    public static User registerCommandToEntity(UserRegisterCommandDTO commandDTO,String encodedPassword){
+    public static User registerCommandToEntity(UserRegisterCommandDTO commandDTO, String encodedPassword) {
         return User.builder()
                 .username(commandDTO.getUsername())
                 .email(commandDTO.getEmail())
@@ -63,21 +63,6 @@ public class ClientConvert {
                 .birthday(commandDTO.getBirthday())
                 .userType(commandDTO.getUserType())
                 .status(UserStatus.NORMAL.getCode())
-                .createdAt(LocalDateTime.now())
-                .updatedAt(LocalDateTime.now())
-                .build();
-    }
-
-    public static EmotionDiary diaryCommandToEntity(DiaryCommandDTO commandDTO,Long userId){
-        return EmotionDiary.builder()
-                .userId(userId)
-                .diaryDate(commandDTO.getDiaryDate())
-                .moodScore(commandDTO.getMoodScore())
-                .dominantEmotion(commandDTO.getDominantEmotion())
-                .emotionTriggers(commandDTO.getEmotionTriggers())
-                .diaryContent(commandDTO.getDiaryContent())
-                .sleepQuality(commandDTO.getSleepQuality())
-                .stressLevel(commandDTO.getStressLevel())
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();

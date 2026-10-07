@@ -12,6 +12,7 @@
               <option name="cwd" value="C:\Users\HP\Desktop\学习资料（真的学习资料）\AI-mentalHealthSystem-master\ai-springboot" />
               <option name="model" value="claude-sonnet-5[1m]" />
               <option name="permissionMode" value="default" />
+              <option name="reasoningEffort" value="high" />
             </TabSessionState>
           </value>
         </entry>

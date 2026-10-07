@@ -26,7 +26,7 @@
                 <div class="article-item" v-for="item in articleList"
                     @click="goToArticle(item.id)" :key="item.id">
                     <el-image style="width:160px;height:120px;flex-shrink:0;"
-                        fit="cover" :src="getImage(item.coverImage)"/>
+                        fit="cover" :src="getImage(item.coverImageUrl)"/>
                     <div class="info">
                         <div class="title">
                             <h3>{{ item.title }}</h3>
@@ -88,8 +88,9 @@ const getPageList=()=>{
     })
 }
 
+//后端已经给的是完整 URL（coverImageUrl），这里只负责兜底
 const getImage=(url)=>{
-    return url?'http://159.75.169.224:1235'+url:'https://file.itndedu.com/psychology_ai.png'
+    return url||'https://file.itndedu.com/psychology_ai.png'
 }
 
 const goToArticle=(id)=>{

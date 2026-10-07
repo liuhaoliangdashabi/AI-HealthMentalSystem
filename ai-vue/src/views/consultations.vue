@@ -7,15 +7,16 @@
                     <el-avatar>{{ scope.row.userNickname }}</el-avatar>
                 </template>
             </el-table-column>
-            <el-table-column labe="情绪日志">
+            <el-table-column label="情绪日志">
                 <template #default="scope">
                     <div class="session-title">{{ scope.row.sessionTitle }}</div>
                     <div class="session-preview">{{ scope.row.lastMessageContent }}</div>
                 </template>
             </el-table-column>
             <el-table-column prop="messageCount" label="消息数" width="100"/>
-            <el-table-column prop="lastMessageTime" label="实践" width="100"/>
-            <el-table-column labe="操作" width="100">
+            <el-table-column prop="durationMinutes" label="时长(分钟)" width="110"/>
+            <el-table-column prop="lastMessageTime" label="时间" width="170"/>
+            <el-table-column label="操作" width="100">
                 <template #default="scope">
                     <el-button type="primary" text @click="viewSessionDetail(scope.row)">详情</el-button>
                 </template>

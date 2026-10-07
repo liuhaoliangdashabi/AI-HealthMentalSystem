@@ -92,7 +92,7 @@
                             <div class="session-actions">
                                 <el-button text
                                     type="danger" size="small"
-                                    @click="handleDeleteSession(session.id)">
+                                    @click.stop="handleDeleteSession(session.id)">
                                     <el-icon><DeleteFilled/></el-icon>
                                 </el-button>
                             </div>
@@ -228,6 +228,12 @@ const currentEmotion=ref({
 })
 
 
+//刷新情绪状态
+const refreshEmotionLater=()=>{
+    const sid=currentSession.value.sessionId
+    setTimeout(()=>loadSessionEmotion(sid),6000)
+}
+
 
 
 //新建会话
@@ -349,7 +355,7 @@ const startAIResponse=(sessionId,userMessage)=>{
             if(eventName==='done'){
                 isAiTyping.value=false
                 ctrl.abort()//关闭掉请求
-                loadSessionEmotion(currentSession.value.sessionId)
+                refreshEmotionLater()
                 return
             }
 
@@ -435,18 +441,19 @@ const formatMessageContent=(content)=>{
     return content.replace(/\n/g,'<br/>')
 }
 
+//★ 这个方法在【模板渲染路径】上被调用（模板第 33 行，v-for="dot in 3" 里一次渲染调 3 次）。
+//  所以不能 throw —— 一抛异常 Vue 的渲染函数就崩，整个会话页停止更新，
+//  表现是"点了没反应、删了不掉"，而且不报错，极难排查。
+//  判断条件保持原样：只有"确实是数字但超出 0-100"才提示
 const getIntensityClass=(score)=>{
-    if(score<0 ||score>100){
+    const n=Number(score)
+    if(Number.isFinite(n)&&(n<0||n>100)){
         ElMessage.error('情绪强度不在0-100之间,情绪输入异常!请反馈给项目组!')
-        throw new Error('情绪强度不在0-100之间,情绪输入异常!请反馈给项目组!')
     }
-    if(score>=61){
-        return 3
-    }else if(score>=31){
-        return 2
-    }else{
-        return 1
-    }
+    if(!Number.isFinite(n)) return 1     // null / undefined / NaN
+    if(n>=61) return 3
+    if(n>=31) return 2
+    return 1
 }
 
 const getRiskText=(level)=>{
@@ -469,8 +476,12 @@ const loadSessionEmotion=(sessionId)=>{
     const id=sessionId.toString().startsWith('session_')?sessionId:`session_${sessionId}`
     getSessionEmotion(id).then(res=>{
         console.log(res)
-        currentEmotion.value=res
-    })
+        currentEmotion.value={
+            ...currentEmotion.value,
+            ...res,
+            improvementSuggestions:res?.improvementSuggestions??[]
+        }
+    }).catch(()=>{})
 }
 
 const formatRelativeTime=(timeStr)=>{

@@ -4,7 +4,9 @@
             <template v-for="item in formItemAttrs" :key="item.prop">
                 <el-col v-bind="item.col">
                     <el-form-item :label="item.label" :prop="item.prop">
-                        <component v-model="formData[item.prop]" :is="isComp(item.comp)" :placeholder="item.placeholder">
+                        <component v-model="formData[item.prop]" :is="isComp(item.comp)" 
+                            :placeholder="item.placeholder"
+                            :type="item.type">
                             <template v-if="item.comp=='select'">
                                 <el-option 
                                     v-for="opt in item.options"

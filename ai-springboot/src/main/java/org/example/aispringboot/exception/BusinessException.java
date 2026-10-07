@@ -22,4 +22,20 @@ public class BusinessException extends RuntimeException {
         this.data = null;
     }
 
+    //带附加数据的业务异常：额外信息会放进 Result.data，前端可以拿去做具体处理
+    public BusinessException(String message, Object data) {
+        super(message);
+        this.code = ResultCode.BUSINESS_ERROR.getCode();
+        this.message = message;
+        this.data = data;
+    }
+
+    //自定义错误码 + 附加数据
+    public BusinessException(String code, String message, Object data) {
+        super(message);
+        this.code = code;
+        this.message = message;
+        this.data = data;
+    }
+
 }
