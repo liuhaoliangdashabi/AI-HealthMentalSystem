@@ -217,7 +217,7 @@ const syncChatHeight=()=>{
     }
 }
 
-const currentEmotion=ref({
+const getDefaultEmotion=()=>({
     primaryEmotion:'中性',
     emotionScore:50,
     isNegative:false,
@@ -226,6 +226,7 @@ const currentEmotion=ref({
     improvementSuggestions:[],
     riskDescription:'您的情绪状态为负面，风险等级为3，建议您及时处理。'
 })
+const currentEmotion=ref(getDefaultEmotion())
 
 
 //刷新情绪状态
@@ -247,6 +248,8 @@ const createNewFrontendSession=()=>{
     currentSession.value=newSession
     sumMessage.value=[]
     isAiTyping.value=false
+    //重置情绪花园为默认状态
+    currentEmotion.value=getDefaultEmotion()
 }
 //用户发送消息
 const sendMessage=()=>{

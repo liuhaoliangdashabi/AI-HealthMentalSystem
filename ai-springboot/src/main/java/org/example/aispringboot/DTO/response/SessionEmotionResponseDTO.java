@@ -1,12 +1,16 @@
 package org.example.aispringboot.DTO.response;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.util.List;
 
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class SessionEmotionResponseDTO {
     //主要情绪，如 "中性"
     private String primaryEmotion;

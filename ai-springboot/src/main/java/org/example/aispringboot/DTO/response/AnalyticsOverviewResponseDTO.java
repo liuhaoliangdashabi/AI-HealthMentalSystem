@@ -1,12 +1,16 @@
 package org.example.aispringboot.DTO.response;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.util.List;
 
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class AnalyticsOverviewResponseDTO {
     private SystemOverview systemOverview;
     private ConsultationStats consultationStats;
@@ -16,6 +20,8 @@ public class AnalyticsOverviewResponseDTO {
     //系统总览
     @Data
     @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class SystemOverview {
         private Long totalUsers;
         private Long activeUsers;
@@ -29,6 +35,8 @@ public class AnalyticsOverviewResponseDTO {
     //咨询会话统计
     @Data
     @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class ConsultationStats {
         private Long totalSessions;
         private Double avgDurationMinutes;
@@ -38,6 +46,8 @@ public class AnalyticsOverviewResponseDTO {
     //咨询每日趋势
     @Data
     @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class DailyTrendItem {
         private String date;
         private Long sessionCount;
@@ -47,6 +57,8 @@ public class AnalyticsOverviewResponseDTO {
     //情绪趋势
     @Data
     @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class EmotionTrendItem {
         private String date;
         private Double avgMoodScore;
@@ -56,6 +68,8 @@ public class AnalyticsOverviewResponseDTO {
     //用户活跃度趋势
     @Data
     @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class UserActivityItem {
         private String date;
         private Long activeUsers;
