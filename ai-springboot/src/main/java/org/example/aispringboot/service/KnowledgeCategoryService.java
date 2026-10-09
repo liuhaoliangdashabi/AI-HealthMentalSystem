@@ -44,31 +44,39 @@ public class KnowledgeCategoryService {
 
     @SuppressWarnings("unchecked")//见 ①
     public List<CategoryResponseDTO> listAll(){
-        //① 查缓存 → 命中就 log.debug 一行 + 强转返回，一个字节都不碰数据库
-        //TODO(你) ①：get() 返回 Object，所以强转必须写（不写编译不过）
+        //get返回的是Object，强转躲不掉的
         List<CategoryResponseDTO> dto=(List<CategoryResponseDTO>) redisTemplate.opsForValue().get(CATEGORY_TREE_KEY);
         log.debug("从缓存中获取分类树，共{}个",dto==null?0:dto.size());
         if(dto!=null)return dto;
-        //② 未命中 → 查库（这两行是原有的，原样保留，别删）
         List<KnowledgeCategory> list=categoryMapper.selectList(null);
-        //TODO(你) ②：转成 List<CategoryResponseDTO>
-        //   坑：别把 stream().toList() 的结果直接塞 Redis
+        //不能把stream().toList()的结果塞进来：JDK内部类写出去不带类型消息，读回来必炸
         dto=list.stream()
                 .map(KnowledgeConvert::categoryToResponse)
                 .collect(Collectors.toCollection(ArrayList::new));
-        //TODO(你) ③：回填缓存 —— set 的三参重载，TTL 用 CATEGORY_TREE_TTL
-        //   想一想：TTL 要是不带，删分类那条路径兜不兜得住？
+        //回填缓存，如果evict失败，这是唯一兜底
         redisTemplate.opsForValue().set(CATEGORY_TREE_KEY,dto,CATEGORY_TREE_TTL);
-        //TODO(你) ④：返回
         return dto;
 
     }
 
-    //分类数据变了 → 整棵树缓存作废，下次请求自然重建
+    //分类数据变了->整棵树缓存作废，下次请求自然重建
     private void evictCategoryTreeCache(){
-        //TODO(你)：删掉 CATEGORY_TREE_KEY
-        redisTemplate.delete(CATEGORY_TREE_KEY);
+        try{
+            redisTemplate.delete(CATEGORY_TREE_KEY);
+        }catch(Exception e){
+            log.warn("分类树缓存失效失败，key={}，等TTL自然过期",CATEGORY_TREE_KEY,e);
+        }
     }
+
+    private void evictAfterCommit(){
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                evictCategoryTreeCache();
+            }
+        });
+    }
+
 
     @Transactional
     public void deleteCategory(Long categoryId){
@@ -84,10 +92,8 @@ public class KnowledgeCategoryService {
                 .set(KnowledgeArticle::getCategoryId,DEFAULT_CATEGORY_ID);
         int moved=articleMapper.update(null,uw);
         categoryMapper.deleteById(categoryId);
-        //TODO(你)：数据变了，缓存要作废。放这行，还是放别处？(它现在在 @Transactional 里，有隐患)
-        evictCategoryTreeCache();
+        evictAfterCommit();
         log.info("删除分类{}成功，挪走了{}篇文章",categoryId,moved);
-
     }
 
     @Transactional
@@ -106,12 +112,7 @@ public class KnowledgeCategoryService {
                 .set(KnowledgeArticle::getCategoryId,goToId);
         int moved=articleMapper.update(null,uw);
         categoryMapper.deleteById(categoryId);
-        //TODO(你)：数据变了，缓存要作废。放这行，还是放别处？(它现在在 @Transactional 里，有隐患)
-        try{
-            evictCategoryTreeCache();
-        }catch(RedisConnectionFailureException e){
-            log.warn("分类树缓存失效失败，key={}，等TTL自然过期",CATEGORY_TREE_KEY,e);
-        }
+        evictAfterCommit();
         log.info("删除分类{}成功，挪走了{}篇文章到{}分类",categoryId,moved,goToId);
     }
 }
