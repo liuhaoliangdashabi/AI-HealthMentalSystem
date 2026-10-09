@@ -52,11 +52,11 @@ oss:
 #新增包且里面写了 log.debug，记得回来补一行
 logging:
   level:
-    org.example.aispringboot.controller: debug
-    org.example.aispringboot.service: debug
-    org.example.aispringboot.util: debug
-    org.example.aispringboot.AiService: debug
-    org.example.aispringboot.common: debug
+    org.example.aispringboot.controller: warn
+    org.example.aispringboot.service: warn
+    org.example.aispringboot.util: warn
+    org.example.aispringboot.AiService: warn
+    org.example.aispringboot.common: warn
 ---
 #模拟生产环境
 spring:
