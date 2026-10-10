@@ -26,6 +26,7 @@ import org.example.aispringboot.service.convert.KnowledgeConvert;
 import org.example.aispringboot.util.OSSUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -46,10 +47,10 @@ public class KnowledgeArticleService {
     @Autowired
     private OSSUtil ossUtil;
     @Autowired
-    private RedisTemplate<String,Object> redis;
+    private StringRedisTemplate redis;
 
     String READ_DELTA_KEY="article:read:delta:";
-    String READ_DIRTY_KEY"article:read:dirty";
+    String READ_DIRTY_KEY="article:read:dirty";
 
     public IPage<ArticleResponseDTO> selectPage(ArticlePageQueryDTO query,
                                                 UserLoginResponseDTO.UserDetailResponseDTO user) {
@@ -148,21 +149,25 @@ public class KnowledgeArticleService {
             log.warn("userId={}无权查看未发布的文章{}，status={}",user.getId(),id,a.getStatus());
             throw new BusinessException("文章不存在");
         }
-        //阅读量：Redis 里只存"自上次回写以来【新增】的阅读数"，所以不需要播种
-        //TODO(你) ①：把原来那条 UPDATE 换成 INCR，拿到增量 delta
-        //   ⚠️ 想清楚：delta 是"增量"不是"总数"
-        Integer delta=Integer.valueOf(redis.opsForValue().increment(READ_DELTA_KEY).toString());
+
+        //──────────────── 第 2 关：阅读量（TODO 你）────────────────
+        // 现状：这里【故意留空】，read_count 不会变 —— 正常，功能还没实现。
+        // 四步：
+        //   ① 只有非管理员才计数（管理员预览不算，见上面 :145 那句注释）
+        //   ② Redis INCR，key = "article:read:delta:" + id  → 拿到【增量】delta（不是总数！）
+        //   ③ Redis SADD，key = "article:read:dirty"，member = id  → 告诉定时任务该回写谁
+        //   ④ a.setReadCount( DB基线 + delta )  → DB 基线就是手上这个 a.getReadCount()
+        //
+        // ⚠️ 这里【不要】再写任何 articleMapper.update(...) —— 写库是定时任务的活，写了就是双重计数
+        // ⚠️ ②③ 的 key 拼法必须和 common/ArticleReadCountTask 里【一字不差】
+        //    （上回就是这里差了东西，白折腾一晚上。写完把两处并排看一眼再往下走）
         if(!isAdmin){
-            //TODO(你) ②：顺手把这个 id 记进"脏集合"，让定时任务知道该回写谁
-            //   （用 Set，别让任务去全库 SCAN —— 注意 article:read:dirty 和 article:read:delta:* 前缀会撞）
+            //TODO(你)：写在这
+            Integer delta=Integer.valueOf(redis.opsForValue().increment(READ_DELTA_KEY+id).toString());
             redis.opsForSet().add(READ_DIRTY_KEY,id);
-            //TODO(你) ③：把 a.setReadCount(...) 改成 【DB 基线 + delta】
-            //   DB 基线就是你手上那个 a.getReadCount()，不用再查一次
-            a.setReadCount(a.getReadCount()==null?delta:(delta+a.getReadCount()));
-            articleMapper.update(null,new LambdaUpdateWrapper<KnowledgeArticle>()
-                    .eq(KnowledgeArticle::getId,id)
-                    .setSql("read_count = read_count + 1"));
+            a.setReadCount(a.getReadCount()+(delta==null?0:delta));
         }
+
 
         /**
          * articleMapper.update(null,new LambdaUpdateWrapper<KnowledgeArticle>()
