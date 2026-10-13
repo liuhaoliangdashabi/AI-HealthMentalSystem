@@ -14,7 +14,9 @@
 
 **第 0 关 ✅、第 1 关（场景A 分类树 + 场景B 文章详情）✅、第 2 关（浏览量 `INCR` + 定时回写）✅、第 3 关（JWT 登出黑名单）✅ —— 全部完成并实测验收。**
 
-**下一步：还第 1 关欠的「兜底账」**（Redis 读路径大面积没降级保护，清单见 **9.4**），然后开第 4 关（热门文章排行榜 ZSet）。
+**第 1 关欠的「兜底账」也已还清 ✅**（4 处代码 + 1 处配置，见 **9.4**）：手写流 4 处 try-catch、注解流 `CacheErrorHandler`、`timeout` 3000→500ms，全部落地。顺带把 **8.6-#7 的 `jti`** 也补了。
+
+**下一步：清 8.6 剩下的几笔小账**（跨模块失效点 / 裸拼 SQL / 增量 key 无 TTL / 无用 import），然后开 **第 4 关：热门文章排行榜（ZSet）**。
 
 ### 0.2 进度表
 
@@ -25,6 +27,7 @@
 | **第 1 关** | 场景B：文章详情缓存（**注解流** `@Cacheable`） | ✅ **完成**（2026-10-13） |
 | **第 2 关** | 浏览量 `INCR` + 定时回写 | ✅ **完成**（2026-10-11） |
 | **第 3 关** | JWT 登出黑名单 ⭐ 最出彩 | ✅ **完成**（2026-10-13，收官记录见**第九节**） |
+| **兜底账** | 第 1 关欠的读路径降级 + `timeout` 调优 | ✅ **完成**（2026-10-13，清单见 **9.4**） |
 | 第 4 关 | 热门文章排行榜（ZSet） | ⬜ 未开始 |
 | 第 5 关 | 限流 + 防重复提交 | ⬜ 未开始 |
 | 第 6 关 | 分布式锁 | ⬜ 未开始 |
@@ -38,13 +41,14 @@
 | 文件 | 状态 |
 |---|---|
 | `config/RedisConfig.java` | ✅ `RedisTemplate<String,Object>`（JSON + `JavaTimeModule`） |
-| `config/CacheConfig.java` | ✅ `@EnableCaching` + `RedisCacheManager`（JSON 序列化 + TTL） |
-| `service/KnowledgeCategoryService.java` | ✅ 场景A：`listAll` 手写 Cache Aside + `evictCategoryTreeCache`（`try-catch(Exception)` 降级）+ **`afterCommit` 钩子** |
+| `config/CacheConfig.java` | ✅ `@EnableCaching` + `RedisCacheManager`（JSON 序列化 + TTL）+ **`implements CachingConfigurer` 自定义 `CacheErrorHandler`（注解流降级）** |
+| `service/KnowledgeCategoryService.java` | ✅ 场景A：`listAll` 手写 Cache Aside（**get / set 各自 try-catch 降级**）+ `evictCategoryTreeCache`（`try-catch` 降级）+ **`afterCommit` 钩子** |
 | `service/ArticleContentService.java` | ✅ 场景B：**拆出来的纯读 bean**，`loadDetail` 贴 `@Cacheable` |
-| `service/KnowledgeArticleService.java` | ✅ 三个写点贴 `@CacheEvict`；`getArticleDetail` 只做「取内容 → 权限 → 计数」 |
+| `service/KnowledgeArticleService.java` | ✅ 三个写点贴 `@CacheEvict`；`getArticleDetail` 只做「取内容 → 权限 → 计数」，**计数两处已 try-catch 降级（`delta` 初值 `0`，避免 NPE）** |
 | `common/ArticleReadCountTask.java` | ✅ 第 2 关回写任务：`pop` 认领 + `getAndDelete` + 失败 `SADD` 放回 |
 | `service/UserService.java` | ✅ 第 3 关：`logout(token)` 写黑名单（`StringRedisTemplate` + TTL=剩余有效期，**fail-closed**） |
 | `util/JwtAuthticationFilter.java` | ✅ 第 3 关：黑名单校验（**fail-open**，Redis 挂则放行） |
+| `util/JwtTokenUtil.java` | ✅ `generateToken` 带 **`jti`**（`.withJWTId(UUID...)`）—— 同用户同秒登录不再签出相同 token |
 
 **Redis key 一览**
 
@@ -52,25 +56,31 @@
 |---|---|---|
 | `cache:category:tree` | 手写流 | TTL 10 分钟 |
 | `article::<id>` | **注解流** | ⚠️ 是 `::` 两个冒号 —— `cacheName + "::" + key` |
-| `article:read:delta:<id>` | 第 2 关 | 增量（不是总数） |
+| `article:read:delta:<id>` | 第 2 关 | 增量（不是总数）；⚠️ **仍无 TTL 兜底**（8.6-#5） |
 | `article:read:dirty` | 第 2 关 | Set，待回写的 id |
 | `blacklist:token:<md5(token)>` | 第 3 关 | String，TTL = token **剩余**有效期；⚠️ key 必须 md5，**读写两边要一致** |
 
 ### 0.4 下一步就做这个
 
-**第 3 关 ✅ 已完成**（收官记录见**第九节**：验收结果 / 设计决策 / 踩坑 / 还没还的账）。
+**兜底账 ✅ 已还清**（2026-10-13 对着代码核对，非凭记忆）：
 
-> 🛑 **用户明确要求：先不急着开下一关，先把兜底账还完。**
-> （2026-10-13 原话："先不要下一关，先写进度文档"）
+1. ✅ 手写流 4 处 try-catch 降级 —— `KnowledgeCategoryService.listAll` 的 get / set、`KnowledgeArticleService.getArticleDetail` 的 `increment` / `SADD`（见 **9.4-A**）
+2. ✅ 注解流 `CacheErrorHandler` —— `CacheConfig` 已 `implements CachingConfigurer`，4 个回调按 warn / error 分级（见 **9.4-B/C**）
+3. ✅ `spring.data.redis.timeout` 已从 `3000ms` 调到 `500ms`（见 **9.7 治法①**）
+4. ✅ 顺带补了 `JwtTokenUtil` 的 **`jti`**（8.6-#7）
 
-**下一步三件事，按顺序：**
+> ⭐ **唯一需要你亲手改的**：`KnowledgeArticleService.getArticleDetail` 里 `delta` 的初值。
+> 原来写的是 `Integer delta = null;`，catch 里没赋 0 → Redis 一挂就 `int + null` → **NPE 500**（正是 9.4 第 2 点警告的坑）。
+> **已改成 `Integer delta = 0;`** ✅（1 行）
 
-1. **还第 1 关欠的「兜底账」** —— Redis 读路径大面积没有降级保护，Redis 一挂就是 500。
-   清单（**4 处代码 + 1 处配置**）见 **9.4**，含每处的降级策略、日志级别和三个易漏点。
-2. **调小 `spring.data.redis.timeout`**（`3000ms` → `500ms`）—— 一行改动，把 Redis 挂时的 9s 降到 1.5s。见 **9.7**。
-3. 上面两件做完，再考虑 **第 4 关：热门文章排行榜（ZSet）**（需求原文见第四节）。
+**下一步：清 8.6 剩下的几笔小账**（都不急，按序）：
 
-开工前先看：**8.6 的待办** + **9.4 的兜底清单** + **9.7 的延迟治理**。
+1. ⬜ ⭐ **跨模块失效点**（8.6-#1）—— `deleteCategory` 改 `article.category_id` 却没失效文章缓存 → `categoryName` 脏读。面试好素材
+2. ⬜ `ArticleReadCountTask:45` 裸字符串拼 SQL → 走 `#{}`（8.6-#4）
+3. ⬜ `article:read:delta:<id>` 补 TTL 兜底（8.6-#5）
+4. ⬜ 无用 import 清理 3 处（8.6-#8）
+
+清完再开 **第 4 关：热门文章排行榜（ZSet）**（需求原文见第四节）。
 
 > ✅ **防穿透已收尾（2026-10-13 对着代码核对，非凭记忆）**：
 > `ArticleContentService.loadDetail:36` 已经是 `if(a==null)return null;`，
@@ -964,20 +974,20 @@ unless = "#result != null && #result.status != T(...ArticleStatus).PUBLISHED.get
 
 ### 8.6 还没做的事（别忘）
 
-> 状态核对于 **2026-10-13**（对着代码核的，不是对着记忆）。
+> 状态核对于 **2026-10-13**（对着代码核的，不是对着记忆）。兜底 / `timeout` / `jti` 三项已于当日复查后勾掉。
 
 1. ⬜ ⭐ **文章详情缓存的跨模块失效点** —— `KnowledgeCategoryService.deleteCategory` 会改 `article.category_id`，
    但那边**没有 `@CacheEvict`**（`evictAfterCommit()` 只删 `cache:category:tree`）→ 那些文章缓存里的 `categoryName` **一直是旧的**。
-   （这是"缓存失效点散落在各个模块"的最好例子，面试能讲）
+   （这是"缓存失效点散落在各个模块"的最好例子，面试能讲）**← 下一步第一件事**
 2. ✅ **防穿透已收尾** —— 见 8.4（`loadDetail:36` 已 `return null`）
 3. ✅ 已修：`ArticleContentService` 那句错注释（`//这里判断用户状态`）已经不在了
 4. ⬜ `ArticleReadCountTask:45` 的 `read_count = IFNULL(read_count,0) + delta` 仍是**裸字符串拼接**（来源是 Redis 的整数，
    眼下安全，但正式项目该走 `#{}` 参数绑定）
 5. ⬜ `article:read:delta:<id>` **没有 TTL 兜底**（有回写补偿了，但进程直接挂掉时没人管）
-6. ⬜ ⭐ **Redis 读路径大面积无兜底**（第 1 关欠的账）—— 共 **4 处代码 + 1 处配置**，清单见 **9.4**，**下一步第一件事**
-7. ⬜ `JwtTokenUtil.generateToken` **没有 `jti` claim** —— `iat` 精度是秒，同用户同秒登录两次会签出**完全相同**的 token → 登出会误伤两个会话。建议 `withJWTId(UUID.randomUUID().toString())`
+6. ✅ **Redis 读路径兜底已还清**（第 1 关欠的账）—— 4 处代码 + 1 处配置全部落地，清单见 **9.4**
+7. ✅ **`jti` 已补** —— `JwtTokenUtil:52` 已有 `.withJWTId(UUID.randomUUID().toString())`，同秒登录不再签出相同 token
 8. ⬜ 无用 import 清理：`UserService:3` logback `TimeUtil`、`:17` `CachePut`、`JwtAuthticationFilter:19` `Cacheable`；`UserService:36` 的 `redis` 字段加 `final`
-9. ⬜ ⭐ **`spring.data.redis.timeout: 3000ms` 太长** —— Redis 挂时**每个调用点各等 3s**（分类树接口实测 **9.07s = 3 次超时**）。实测往返只有 0.35~1.27ms → 建议降到 `500ms`。**一行改动**，见 **9.7**
+9. ✅ **`timeout` 已从 `3000ms` 调到 `500ms`** —— 见 **9.7 治法①**；Redis 挂时分类树接口 9.07s → 约 1.5s
 
 ---
 
@@ -1017,30 +1027,31 @@ unless = "#result != null && #result.status != T(...ArticleStatus).PUBLISHED.get
 | 5 | **降级保护加错层** | filter 已放行，业务层照样 500 | 降级是**每个 Redis 调用点**的责任，加在入口（filter）拦不住 Service 的异常 |
 | 6 | **`NumberFormatException`** | 定时任务日志里出现 | 见 9.5 |
 
-### 9.4 ⚠️ 还没还的账：Redis 读路径大面积无兜底（第 1 关欠的）
+### 9.4 ✅ 已还清：Redis 读路径兜底（第 1 关欠的）
 
-> 现状：Redis 一挂，下面这些**全 500**。这是第 3 关期间扫出来的，**下一步第一件事**。
+> **状态（2026-10-13 对着代码核对）：4 处代码 + 1 处配置全部落地。**
+> 唯一需要你亲手改的是 `delta` 初值，见下面「三个必须注意的点」第 2 条 —— **已改**。
 
-**A. 手写流 —— 每个调用点自己包（4 处）**
+**A. 手写流 —— 每个调用点自己包（4 处，✅ 全已落地）**
 
-| 位置 | 现状 | 降级策略 | 日志级别 |
-|---|---|---|---|
-| `KnowledgeCategoryService.listAll:48` | `opsForValue().get(...)` 裸调用 | **当 miss**（dto 置 null，继续往下查库） | `warn` |
-| `KnowledgeCategoryService.listAll:57` | 回填 `set(...)` 裸调用 | 只记日志，不影响返回 | `warn` |
-| `KnowledgeArticleService.getArticleDetail:163` | `increment(READ_DELTA_KEY+id)` | 降级，`delta` 给 **0** | `warn` |
-| `KnowledgeArticleService.getArticleDetail:164` | `opsForSet().add(READ_DIRTY_KEY,id)` | 同上 | `warn` |
+| 位置 | 原现状 | 降级策略 | 日志级别 | 状态 |
+|---|---|---|---|---|
+| `KnowledgeCategoryService.listAll:48` | `opsForValue().get(...)` 裸调用 | **当 miss**（dto 置 null，继续往下查库） | `warn` | ✅ |
+| `KnowledgeCategoryService.listAll:57` | 回填 `set(...)` 裸调用 | 只记日志，不影响返回 | `warn` | ✅ |
+| `KnowledgeArticleService.getArticleDetail:163` | `increment(READ_DELTA_KEY+id)` | 降级，`delta` 给 **0** | `warn` | ✅ |
+| `KnowledgeArticleService.getArticleDetail:164` | `opsForSet().add(READ_DIRTY_KEY,id)` | 同上 | `warn` | ✅ |
 
 ⚠️ **三个必须注意的点**：
 
-1. `:163` 和 `:164` **是一个整体，必须一起包**。只包 163 会出现「计数加了但没进脏集 → 定时任务永不回写 MySQL → **计数丢失**」。
-2. 包了之后 `delta` 就没值了，`dto.setReadCount(... + delta)` 会 **NPE** → catch 里必须给 `delta = 0`。**最容易漏的一处。**
-3. `listAll:48` 的 catch 里**不能 `return` 空列表** —— 空列表会被上层当成「分类树真的是空的」，前端拿到空菜单。fail-open 的正确姿势是「**假装没命中缓存**」，不是「给个假值」。
+1. `:163` 和 `:164` **是一个整体，必须一起包**。只包 163 会出现「计数加了但没进脏集 → 定时任务永不回写 MySQL → **计数丢失**」。（已满足：两处都包了）
+2. ⭐ **包了之后 `delta` 就没值了，`dto.setReadCount(... + delta)` 会 NPE** → 初值必须给 `0`。**最容易漏的一处 —— 实测这里确实漏了**：原来写 `Integer delta = null;`，catch 里没赋 0 → Redis 一挂就 `int + null` → **NPE 500**。**已改成 `Integer delta = 0;`** ✅
+3. `listAll:48` 的 catch 里**不能 `return` 空列表** —— 空列表会被上层当成「分类树真的是空的」，前端拿到空菜单。fail-open 的正确姿势是「**假装没命中缓存**」，不是「给个假值」。（已满足）
 
-**B. 注解流 —— 一处配置全覆盖**
+**B. 注解流 —— 一处配置全覆盖 ✅ 已落地**
 
 `CacheConfig` 实现 `CachingConfigurer` + 自定义 `CacheErrorHandler`，一次性覆盖：
 - `ArticleContentService.loadDetail` 的 `@Cacheable`
-- `KnowledgeArticleService` 三个 `@CacheEvict`（`:132` / `:172` / `:183`）
+- `KnowledgeArticleService` 三个 `@CacheEvict`（`:132` / `:181` / `:192`）
 
 **要点**：
 
@@ -1175,17 +1186,17 @@ redis-cli OBJECT ENCODING article:read:delta:<id>  # int / embstr / raw
 
 （Spring Boot 的 Lettuce 默认 `shareNativeConnection=true`，所有命令共享同一个 native connection —— 它挂了，所有命令在同一个队列里排队等。）
 
-#### 治法 ①：调小 `timeout`（本项目的正解）
+#### 治法 ①：调小 `timeout`（本项目的正解）✅ 已做
 
 ```yaml
 spring:
   data:
     redis:
-      timeout: 500ms      # ← 原来 3000ms
+      timeout: 500ms      # ← 原来 3000ms（✅ 已改）
 ```
 
 本项目实测 Redis 往返 **0.348 ~ 1.268ms**（见 5.2）→ 500ms 是 **400 倍余量**。
-改完 9s → 1.5s。**一行改动、零风险，先做这个。**
+改完 9s → 1.5s。**一行改动、零风险。✅ 已改。**
 
 #### 治法 ②：熔断器（Circuit Breaker）
 

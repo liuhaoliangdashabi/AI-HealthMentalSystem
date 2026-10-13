@@ -10,6 +10,8 @@ import org.example.aispringboot.exception.BusinessException;
 import org.example.aispringboot.mapper.KnowledgeArticleMapper;
 import org.example.aispringboot.mapper.KnowledgeCategoryMapper;
 import org.example.aispringboot.service.convert.KnowledgeConvert;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
@@ -29,17 +31,21 @@ public class KnowledgeCategoryService {
     private final KnowledgeArticleMapper articleMapper;
     private final RedisTemplate<String,Object> redisTemplate;
     private static final Long DEFAULT_CATEGORY_ID=1L;
+    private final CacheManager cacheManager;
 
     //分类树读多写少、变更极少、就一棵 → 全量一个 key 搞定，不会分页 key 爆炸
     private static final String CATEGORY_TREE_KEY="cache:category:tree";
     private static final Duration CATEGORY_TREE_TTL=Duration.ofMinutes(10);
+    private static final String ARTICLE_CACHE_NAME="article";
 
     public KnowledgeCategoryService(KnowledgeCategoryMapper categoryMapper,
                                     KnowledgeArticleMapper articleMapper,
-                                    RedisTemplate<String,Object> redisTemplate){
+                                    RedisTemplate<String,Object> redisTemplate,
+                                    CacheManager cacheManager){
         this.articleMapper=articleMapper;
         this.categoryMapper=categoryMapper;
         this.redisTemplate=redisTemplate;
+        this.cacheManager=cacheManager;
     }
 
     @SuppressWarnings("unchecked")//见 ①
@@ -78,11 +84,27 @@ public class KnowledgeCategoryService {
         }
     }
 
-    private void evictAfterCommit(){
+    private void evictArticleCache(List<String> articleIds){
+        Cache cache=cacheManager.getCache(ARTICLE_CACHE_NAME);
+        if(cache==null){
+            log.warn("拿不到{}缓存，文章缓存本次不生效，等TTL自然过期",ARTICLE_CACHE_NAME);
+            return;
+        }
+        for(String id:articleIds){
+            try{
+                cache.evict(id);
+            }catch(Exception e){
+                log.warn("文章缓存失效失败，id={}，等TTL自然过期",id,e);
+            }
+        }
+    }
+
+    private void evictAfterCommit(List<String> articleIds){
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
                 evictCategoryTreeCache();
+                evictArticleCache(articleIds);
             }
         });
     }
@@ -97,12 +119,20 @@ public class KnowledgeCategoryService {
         KnowledgeCategory category=categoryMapper.selectById(categoryId);
         if(category==null)throw new BusinessException("要删除的分类不存在");
 
+        //先捞受影响的文章
+        List<KnowledgeArticle> affectedArticles=articleMapper.selectList(
+                new LambdaQueryWrapper<KnowledgeArticle>()
+                        .select(KnowledgeArticle::getId)
+                        .eq(KnowledgeArticle::getCategoryId,categoryId));
+        List<String> affectedArticleIds=affectedArticles.stream()
+                .map(a->String.valueOf(a.getId())).toList();
+
         LambdaUpdateWrapper<KnowledgeArticle> uw=new LambdaUpdateWrapper<>();
         uw.eq(KnowledgeArticle::getCategoryId,categoryId)
                 .set(KnowledgeArticle::getCategoryId,DEFAULT_CATEGORY_ID);
         int moved=articleMapper.update(null,uw);
         categoryMapper.deleteById(categoryId);
-        evictAfterCommit();
+        evictAfterCommit(affectedArticleIds);
         log.info("删除分类{}成功，挪走了{}篇文章",categoryId,moved);
     }
 
@@ -117,12 +147,20 @@ public class KnowledgeCategoryService {
         KnowledgeCategory goToCategory=categoryMapper.selectById(goToId);
         if(goToCategory==null)throw new BusinessException("目标分类不存在");
 
+        //先捞受影响的文章
+        List<KnowledgeArticle> affectedArticles=articleMapper.selectList(
+                new LambdaQueryWrapper<KnowledgeArticle>()
+                        .select(KnowledgeArticle::getId)
+                        .eq(KnowledgeArticle::getCategoryId,categoryId));
+        List<String> affectedArticleIds=affectedArticles.stream()
+                .map(a->String.valueOf(a.getId())).toList();
+
         LambdaUpdateWrapper<KnowledgeArticle> uw=new LambdaUpdateWrapper<>();
         uw.eq(KnowledgeArticle::getCategoryId,categoryId)
                 .set(KnowledgeArticle::getCategoryId,goToId);
         int moved=articleMapper.update(null,uw);
         categoryMapper.deleteById(categoryId);
-        evictAfterCommit();
+        evictAfterCommit(affectedArticleIds);
         log.info("删除分类{}成功，挪走了{}篇文章到{}分类",categoryId,moved,goToId);
     }
 }

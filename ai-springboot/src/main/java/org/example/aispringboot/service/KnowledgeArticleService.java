@@ -160,7 +160,7 @@ public class KnowledgeArticleService {
 
         if(!isAdmin){
             //TODO(你)：写在这
-            Integer delta= null;
+            Integer delta=0;
             try {
                 delta = Integer.valueOf(redis.opsForValue().increment(READ_DELTA_KEY+id).toString());
             } catch (Exception e) {
