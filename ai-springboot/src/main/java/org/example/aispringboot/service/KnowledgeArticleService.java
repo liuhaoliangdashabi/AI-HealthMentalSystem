@@ -25,6 +25,8 @@ import org.example.aispringboot.mapper.UserMapper;
 import org.example.aispringboot.service.convert.KnowledgeConvert;
 import org.example.aispringboot.util.OSSUtil;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -46,6 +48,8 @@ public class KnowledgeArticleService {
     private UserMapper userMapper;
     @Autowired
     private OSSUtil ossUtil;
+    @Autowired
+    private ArticleContentService contentService;
     @Autowired
     private StringRedisTemplate redis;
 
@@ -125,6 +129,7 @@ public class KnowledgeArticleService {
         articleMapper.insert(article);
     }
 
+    @CacheEvict(cacheNames = "article", key = "#articleId")
     public void putArticleStatus(String articleId, ArticleStatusCommandDTO status){
         //★ 之前完全不校验 —— 前端传个 99 也会原样写进库。
         //  正好把一直没人调用的 ArticleStatus.isValidCode 用上
@@ -139,51 +144,41 @@ public class KnowledgeArticleService {
         articleMapper.update(uw);
     }
 
+
     public ArticleResponseDTO getArticleDetail(String id,
                                                UserLoginResponseDTO.UserDetailResponseDTO user) {
-        KnowledgeArticle a=articleMapper.selectById(id);
-        if(a==null)throw new BusinessException("文章不存在");
+        ArticleResponseDTO dto=contentService.loadDetail(id);
+        if(dto==null)throw new BusinessException("文章不存在");
+        Integer status=dto.getStatus();
         //非管理员只能看已发布的。文案统一成"不存在"，不泄露草稿的存在
         boolean isAdmin= UserType.ADMIN.getCode().equals(user.getUserType());
-        if(!isAdmin && !ArticleStatus.PUBLISHED.getCode().equals(a.getStatus())){
-            log.warn("userId={}无权查看未发布的文章{}，status={}",user.getId(),id,a.getStatus());
+        if(!isAdmin && !ArticleStatus.PUBLISHED.getCode().equals(status)){
+            log.warn("userId={}无权查看未发布的文章{}，status={}",user.getId(),id,status);
             throw new BusinessException("文章不存在");
         }
 
-        //──────────────── 第 2 关：阅读量（TODO 你）────────────────
-        // 现状：这里【故意留空】，read_count 不会变 —— 正常，功能还没实现。
-        // 四步：
-        //   ① 只有非管理员才计数（管理员预览不算，见上面 :145 那句注释）
-        //   ② Redis INCR，key = "article:read:delta:" + id  → 拿到【增量】delta（不是总数！）
-        //   ③ Redis SADD，key = "article:read:dirty"，member = id  → 告诉定时任务该回写谁
-        //   ④ a.setReadCount( DB基线 + delta )  → DB 基线就是手上这个 a.getReadCount()
-        //
-        // ⚠️ 这里【不要】再写任何 articleMapper.update(...) —— 写库是定时任务的活，写了就是双重计数
-        // ⚠️ ②③ 的 key 拼法必须和 common/ArticleReadCountTask 里【一字不差】
-        //    （上回就是这里差了东西，白折腾一晚上。写完把两处并排看一眼再往下走）
+
         if(!isAdmin){
             //TODO(你)：写在这
-            Integer delta=Integer.valueOf(redis.opsForValue().increment(READ_DELTA_KEY+id).toString());
-            redis.opsForSet().add(READ_DIRTY_KEY,id);
-            a.setReadCount(a.getReadCount()+(delta==null?0:delta));
+            Integer delta= null;
+            try {
+                delta = Integer.valueOf(redis.opsForValue().increment(READ_DELTA_KEY+id).toString());
+            } catch (Exception e) {
+                log.warn("新增文章阅读增量失败，Redis挂了，快去修复",e);
+            }
+            try {
+                redis.opsForSet().add(READ_DIRTY_KEY,id);
+            } catch (Exception e) {
+                log.warn("设置新阅读文章失败，Redis挂了，快去修复",e);
+            }
+            dto.setReadCount((dto.getReadCount()==null?0:dto.getReadCount())+delta);
         }
 
 
-        /**
-         * articleMapper.update(null,new LambdaUpdateWrapper<KnowledgeArticle>()
-         *                     .eq(KnowledgeArticle::getId,id)
-         *                     .setSql("read_count = read_count + 1"));
-         *             a.setReadCount((a.getReadCount()==null?0:a.getReadCount())+1);
-         */
-
-        User u=userMapper.selectById(a.getAuthorId());
-        if(u==null)log.warn("文章{}的作者{}不存在，可能是脏数据",id,a.getAuthorId());
-        KnowledgeCategory c=categoryMapper.selectById(a.getCategoryId());
-        if(c==null)log.warn("文章{}的分类{}不存在，可能是脏数据",id,a.getCategoryId());
-        return withCoverUrl(KnowledgeConvert.articleToResponse(a,u==null?null:u.getDisplayName(),
-                c==null?null:c.getCategoryName()));
+        return dto;
     }
 
+    @CacheEvict(cacheNames = "article", key = "#articleId")
     public void putArticleDetail(String articleId, @Valid ArticleCommandDTO commandDTO) {
         KnowledgeArticle entity=KnowledgeConvert.toUpdateEntity(articleId,commandDTO);
         int count=articleMapper.updateById(entity);
@@ -194,6 +189,7 @@ public class KnowledgeArticleService {
         log.debug("文章已更新：articleId={}",articleId);
     }
 
+    @CacheEvict(cacheNames = "article", key = "#articleId")
     public void deleteArticle(String articleId) {
         int count=articleMapper.deleteById(articleId);
         if(count==0){
@@ -202,11 +198,10 @@ public class KnowledgeArticleService {
         }
     }
 
-    //coverImage 存的是 OSS 相对路径，这里换算成能直接访问的完整 URL 填进 coverImageUrl
-    //（历史数据里可能已经存了完整 URL，OSSUtil.getUrl 会原样返回，不会重复拼）
     private ArticleResponseDTO withCoverUrl(ArticleResponseDTO dto){
         dto.setCoverImageUrl(ossUtil.getUrl(dto.getCoverImage()));
         return dto;
     }
+
 }
 

@@ -1,5 +1,6 @@
 package org.example.aispringboot.util;
 
+import cn.hutool.crypto.digest.DigestUtil;
 import cn.hutool.json.JSONUtil;
 import com.auth0.jwt.exceptions.JWTVerificationException;
 import com.auth0.jwt.exceptions.TokenExpiredException;
@@ -15,6 +16,8 @@ import org.example.aispringboot.enumClass.UserStatus;
 import org.example.aispringboot.exception.BusinessException;
 import org.example.aispringboot.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -31,6 +34,8 @@ public class JwtAuthticationFilter extends OncePerRequestFilter {
     private UserService userService;
     @Autowired
     private JwtTokenUtil jwtTokenUtil;
+    @Autowired
+    private StringRedisTemplate redis;
 
     //确保每个请求只执行一次，不要在过滤器中反复打转
     @Override
@@ -79,6 +84,21 @@ public class JwtAuthticationFilter extends OncePerRequestFilter {
                 }
                 log.debug("认证通过，userId={}",validationResult.getUserId());
                 if(user!=null && UserStatus.NORMAL.getCode().equals(user.getStatus())){
+                    String isBlack=null;
+                    try {
+                        isBlack = redis.opsForValue().get("blacklist:token:"+ DigestUtil.md5Hex(token));
+                        if(isBlack!=null){
+                            log.info("token被加入黑名单，所属Id={}",validationResult.getUserId());
+                            clearSecurityContext();
+                            ResponseUtil.WriteError(response,ResultCode.TOKEN_BLOCKED);
+                            return;
+                        }
+                    } catch (Exception e) {
+                        log.error("查黑名单失败，Redis出问题了！尽快维修！！",e);
+//                        clearSecurityContext();
+//                        ResponseUtil.WriteError(response,ResultCode.SYSTEM_ERROR);
+//                        return;
+                    }
                     //4.创建SpringSecurity认证对象
                     List<SimpleGrantedAuthority> authorities=Collections.singletonList(
                             new SimpleGrantedAuthority("ROLE_"+validationResult.getRoleType())

@@ -45,8 +45,14 @@ public class KnowledgeCategoryService {
     @SuppressWarnings("unchecked")//见 ①
     public List<CategoryResponseDTO> listAll(){
         //get返回的是Object，强转躲不掉的
-        List<CategoryResponseDTO> dto=(List<CategoryResponseDTO>) redisTemplate.opsForValue().get(CATEGORY_TREE_KEY);
-        log.debug("从缓存中获取分类树，共{}个",dto==null?0:dto.size());
+        List<CategoryResponseDTO> dto= null;
+        try {
+            dto = (List<CategoryResponseDTO>) redisTemplate.opsForValue().get(CATEGORY_TREE_KEY);
+            log.debug("从缓存中获取分类树，共{}个",dto==null?0:dto.size());
+        } catch (Exception e) {
+            log.warn("缓存获取分类树失败，Redis出问题了，尽快修复",e);
+        }
+
         if(dto!=null)return dto;
         List<KnowledgeCategory> list=categoryMapper.selectList(null);
         //不能把stream().toList()的结果塞进来：JDK内部类写出去不带类型消息，读回来必炸
@@ -54,7 +60,11 @@ public class KnowledgeCategoryService {
                 .map(KnowledgeConvert::categoryToResponse)
                 .collect(Collectors.toCollection(ArrayList::new));
         //回填缓存，如果evict失败，这是唯一兜底
-        redisTemplate.opsForValue().set(CATEGORY_TREE_KEY,dto,CATEGORY_TREE_TTL);
+        try {
+            redisTemplate.opsForValue().set(CATEGORY_TREE_KEY,dto,CATEGORY_TREE_TTL);
+        } catch (Exception e) {
+            log.warn("回填缓存失效，Redis出问题了，尽快修复",e);
+        }
         return dto;
 
     }

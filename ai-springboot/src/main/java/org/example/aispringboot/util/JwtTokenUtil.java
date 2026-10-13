@@ -21,6 +21,8 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.util.Date;
+import java.util.UUID;
+
 @Slf4j
 @Component
 public class JwtTokenUtil {
@@ -32,6 +34,8 @@ public class JwtTokenUtil {
     }
 
     //生成token
+    //JWT的iat(s)，withIssuedAt(new Date())，精度不一致
+    //如果没做防重提交，token一模一样，登出会把两个token一起拉黑：改唯一的UUID
     public String generateToken(Long userId,String username,Integer roleType){
         try {
             log.debug("现在正在生成token");
@@ -45,6 +49,7 @@ public class JwtTokenUtil {
                     .withClaim("username",username)
                     .withClaim("roleType",roleType)
                     .withIssuedAt(new Date())
+                    .withJWTId(UUID.randomUUID().toString())
                     .withIssuer(ISSUER)
                     .withExpiresAt(expiration)
                     .sign(algorithm);

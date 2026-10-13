@@ -51,6 +51,8 @@ public class UserController {
     @PostMapping("/user/logout")
     public Result<Void> logout(){
         log.debug("用户退出登录");
+        String token=jwtTokenUtil.getCurrentToken();
+        userService.logout(token);
         return Result.success();
     }
 

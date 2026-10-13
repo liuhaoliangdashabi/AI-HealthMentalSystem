@@ -1,5 +1,7 @@
 package org.example.aispringboot.service;
 
+import ch.qos.logback.core.util.TimeUtil;
+import cn.hutool.crypto.digest.DigestUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -12,8 +14,17 @@ import org.example.aispringboot.exception.BusinessException;
 import org.example.aispringboot.mapper.UserMapper;
 import org.example.aispringboot.service.convert.UserConvert;
 import org.example.aispringboot.util.JwtTokenUtil;
+import org.springframework.cache.annotation.CachePut;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
+
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.util.Date;
+import java.util.concurrent.TimeUnit;
+
+
 @Slf4j
 @Service
 public class UserService {
@@ -22,10 +33,14 @@ public class UserService {
 
     private final BCryptPasswordEncoder passwordEncoder;
     private final JwtTokenUtil jwtTokenUtil;
+    private StringRedisTemplate redis;
 
-    public UserService(BCryptPasswordEncoder passwordEncoder,JwtTokenUtil jwtTokenUtil){
+    public UserService(BCryptPasswordEncoder passwordEncoder,
+                       JwtTokenUtil jwtTokenUtil,
+                       StringRedisTemplate redis){
         this.passwordEncoder=passwordEncoder;
         this.jwtTokenUtil=jwtTokenUtil;
+        this.redis=redis;
     }
 
     public UserLoginResponseDTO login(UserLoginCommandDTO commandDTO){
@@ -94,5 +109,18 @@ public class UserService {
             throw new BusinessException("用户不存在");
         }
         return UserConvert.entityToDetailResponse(user);
+    }
+
+
+    public void logout(String token) {
+            Long exp= jwtTokenUtil.verifyToken(token).getExpiresAt().getTime();
+            Long remainTime=exp-System.currentTimeMillis();
+            if(remainTime<=0)return;
+        try {
+            redis.opsForValue().set("blacklist:token:"+ DigestUtil.md5Hex(token),"1",remainTime, TimeUnit.MILLISECONDS);
+        } catch (Exception e) {
+            log.error("登出写黑名单失败，Redis出问题了，赶紧修复！",e);
+            throw new BusinessException("登出失败，请重试");
+        }
     }
 }
