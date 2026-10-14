@@ -1,18 +1,4 @@
 spring:
-  datasource:
-    url: jdbc:mysql://localhost:3306/mental_health_assistant?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8
-    username: root
-    password: ${DB_PASSWORD}
-    driver-class-name: com.mysql.cj.jdbc.Driver
-  autoconfigure:
-    exclude:
-      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
-  #文件上传上限。不配的话 Spring Boot 默认只有 1MB ——
-  #那样 OSSUtil 里那个 10MB 校验会因为请求先被 MultipartResolver 拦掉而【永远执行不到】
-  servlet:
-    multipart:
-      max-file-size: 10MB
-      max-request-size: 10MB
   ai:
     openai:
       chat:
@@ -32,12 +18,30 @@ spring:
       audio:
         speech: none
         transcription: none
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
   data:
     redis:
       host: localhost
       port: 6379
       database: 0
       timeout: 500ms
+  datasource:
+    url: jdbc:mysql://localhost:3306/mental_health_assistant?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8
+    username: root
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    #文件上传上限。不配的话 Spring Boot 默认只有 1MB：
+    #那样OSSUtil里那个10MB校验会因为请求先被MultipartResolver拦掉而（永远执行不到）
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+  task:
+    scheduling:
+      pool:
+        size: 2 #默认值为1，注意跌过坑
 jwt:
   secret: ${JWT_SECRET}
   expiration: 86400000  # 24小时（毫秒）

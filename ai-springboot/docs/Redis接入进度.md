@@ -2,9 +2,11 @@
 
 > **这是本项目的唯一进度文档。** 想知道「Redis 接得怎么样了、下一步干什么」，读这一篇就够了，不用翻别的文件，也不用重新扫代码。
 >
-> 更新日期：**2026-10-13**
+> 更新日期：**2026-10-14**
 >
 > `docs/` 下另外两篇（`DTO怎么写.md`、`事务练习-删除知识分类.md`）是**知识笔记**，不含进度信息。
+>
+> ⚠️ **用户约定（AI 必须遵守）**：**冗余 import 不用提醒** —— 用户会按 IDE 提示自己清理。**不要**把"清理无用 import"写进待办清单、review 结论或本文档的待办项。
 
 ---
 
@@ -12,11 +14,15 @@
 
 ### 0.1 一句话状态
 
-**第 0 关 ✅、第 1 关（场景A 分类树 + 场景B 文章详情）✅、第 2 关（浏览量 `INCR` + 定时回写）✅、第 3 关（JWT 登出黑名单）✅ —— 全部完成并实测验收。**
+**第 0 关 ✅、第 1 关（场景A 分类树 + 场景B 文章详情）✅、第 2 关（浏览量 `INCR` + 定时回写）✅、第 3 关（JWT 登出黑名单）✅、第 4 关（热门文章排行榜 ZSet）✅ —— 全部完成并实测验收。**
 
 **第 1 关欠的「兜底账」也已还清 ✅**（4 处代码 + 1 处配置，见 **9.4**）：手写流 4 处 try-catch、注解流 `CacheErrorHandler`、`timeout` 3000→500ms，全部落地。顺带把 **8.6-#7 的 `jti`** 也补了。
 
-**下一步：清 8.6 剩下的几笔小账**（跨模块失效点 / 裸拼 SQL / 增量 key 无 TTL / 无用 import），然后开 **第 4 关：热门文章排行榜（ZSet）**。
+**第 4 关收官记录见第十节**（2026-10-14）：定为「**最近 7 天热度**」+「**天级 key 实时累加 + 定时 `ZUNIONSTORE` 预热**」，前端「推荐阅读」已从累计榜切到新接口。
+
+**下一步：第 5 关（限流 + 防重复提交）**（需求原文见第四节）。
+
+**还剩几笔小账**（不急，见 8.6）：裸拼 SQL / 增量 key 无 TTL。
 
 ### 0.2 进度表
 
@@ -28,7 +34,7 @@
 | **第 2 关** | 浏览量 `INCR` + 定时回写 | ✅ **完成**（2026-10-11） |
 | **第 3 关** | JWT 登出黑名单 ⭐ 最出彩 | ✅ **完成**（2026-10-13，收官记录见**第九节**） |
 | **兜底账** | 第 1 关欠的读路径降级 + `timeout` 调优 | ✅ **完成**（2026-10-13，清单见 **9.4**） |
-| 第 4 关 | 热门文章排行榜（ZSet） | ⬜ 未开始 |
+| **第 4 关** | 热门文章排行榜（ZSet） | ✅ **完成**（2026-10-14，收官记录见**第十节**） |
 | 第 5 关 | 限流 + 防重复提交 | ⬜ 未开始 |
 | 第 6 关 | 分布式锁 | ⬜ 未开始 |
 | 第 7 关 | 高级数据结构 | ⬜ 未开始 |
@@ -44,8 +50,11 @@
 | `config/CacheConfig.java` | ✅ `@EnableCaching` + `RedisCacheManager`（JSON 序列化 + TTL）+ **`implements CachingConfigurer` 自定义 `CacheErrorHandler`（注解流降级）** |
 | `service/KnowledgeCategoryService.java` | ✅ 场景A：`listAll` 手写 Cache Aside（**get / set 各自 try-catch 降级**）+ `evictCategoryTreeCache`（`try-catch` 降级）+ **`afterCommit` 钩子** |
 | `service/ArticleContentService.java` | ✅ 场景B：**拆出来的纯读 bean**，`loadDetail` 贴 `@Cacheable` |
-| `service/KnowledgeArticleService.java` | ✅ 三个写点贴 `@CacheEvict`；`getArticleDetail` 只做「取内容 → 权限 → 计数」，**计数两处已 try-catch 降级（`delta` 初值 `0`，避免 NPE）** |
-| `common/ArticleReadCountTask.java` | ✅ 第 2 关回写任务：`pop` 认领 + `getAndDelete` + 失败 `SADD` 放回 |
+| `service/KnowledgeArticleService.java` | ✅ 三个写点贴 `@CacheEvict`；`getArticleDetail` 只做「取内容 → 权限 → 计数」，**计数两处已 try-catch 降级**；**第 4 关：`getArticleDetail` 里 `ZINCRBY` 日热度（+8 天 TTL）、`getHotArticle()` 读榜（只包 Redis 的兜底）、`complementArticleDTO` 共用补名字逻辑** |
+| `common/ArticleReadCountTask.java` | ✅ 第 2 关回写任务：`pop` 认领 + `getAndDelete` + 失败 `SADD` 放回；**第 4 关：`preheatArticleHot()` 每 30 秒 `ZUNIONSTORE` 预热 7 天榜（TTL 90 秒）** |
+| `controller/KnowledgeController.java` | ✅ 第 4 关：`GET /api/knowledge/article/hot` |
+| `ai-vue/src/views/frontendKnowledge.vue` | ✅ 第 4 关：「推荐阅读」改调 `/knowledge/article/hot`（原先是 `sortField=readCount` 的**累计榜**） |
+| `ai-vue/src/api/frontend.js` | ✅ 第 4 关：新增 `getHotArticles()` |
 | `service/UserService.java` | ✅ 第 3 关：`logout(token)` 写黑名单（`StringRedisTemplate` + TTL=剩余有效期，**fail-closed**） |
 | `util/JwtAuthticationFilter.java` | ✅ 第 3 关：黑名单校验（**fail-open**，Redis 挂则放行） |
 | `util/JwtTokenUtil.java` | ✅ `generateToken` 带 **`jti`**（`.withJWTId(UUID...)`）—— 同用户同秒登录不再签出相同 token |
@@ -59,6 +68,8 @@
 | `article:read:delta:<id>` | 第 2 关 | 增量（不是总数）；⚠️ **仍无 TTL 兜底**（8.6-#5） |
 | `article:read:dirty` | 第 2 关 | Set，待回写的 id |
 | `blacklist:token:<md5(token)>` | 第 3 关 | String，TTL = token **剩余**有效期；⚠️ key 必须 md5，**读写两边要一致** |
+| `article:hot:<yyyy-MM-dd>` | 第 4 关 | ZSet，当天热度；TTL **8 天**（自动滚出窗口）；⚠️ **冒号别漏**（`article:hot:` 不是 `article:hot`） |
+| `article:hot:7d` | 第 4 关 | ZSet，最近 7 天合并榜；定时任务每 30 秒重建，TTL **90 秒** |
 
 ### 0.4 下一步就做这个
 
@@ -73,14 +84,11 @@
 > 原来写的是 `Integer delta = null;`，catch 里没赋 0 → Redis 一挂就 `int + null` → **NPE 500**（正是 9.4 第 2 点警告的坑）。
 > **已改成 `Integer delta = 0;`** ✅（1 行）
 
-**下一步：清 8.6 剩下的几笔小账**（都不急，按序）：
+**第 4 关 ✅ 已完成**（2026-10-14，收官记录见**第十节**）。
 
-1. ⬜ ⭐ **跨模块失效点**（8.6-#1）—— `deleteCategory` 改 `article.category_id` 却没失效文章缓存 → `categoryName` 脏读。面试好素材
-2. ⬜ `ArticleReadCountTask:45` 裸字符串拼 SQL → 走 `#{}`（8.6-#4）
-3. ⬜ `article:read:delta:<id>` 补 TTL 兜底（8.6-#5）
-4. ⬜ 无用 import 清理 3 处（8.6-#8）
+**下一步：第 5 关（限流 + 防重复提交）**（需求原文见第四节）。
 
-清完再开 **第 4 关：热门文章排行榜（ZSet）**（需求原文见第四节）。
+**顺带清了 8.6-#1**（跨模块失效点，已完成）。剩余小账（见 8.6）：`ArticleReadCountTask:45` 裸拼 SQL、`article:read:delta:<id>` 无 TTL。
 
 > ✅ **防穿透已收尾（2026-10-13 对着代码核对，非凭记忆）**：
 > `ArticleContentService.loadDetail:36` 已经是 `if(a==null)return null;`，
@@ -310,7 +318,7 @@ JWT 是**无状态**的，token 一旦签发，在过期前永远有效。所以
 
 ---
 
-### 第 4 关：热门文章排行榜（ZSet）
+### 第 4 关：热门文章排行榜（ZSet）✅ 已完成（2026-10-14）
 
 | 项 | 内容 |
 |---|---|
@@ -976,9 +984,7 @@ unless = "#result != null && #result.status != T(...ArticleStatus).PUBLISHED.get
 
 > 状态核对于 **2026-10-13**（对着代码核的，不是对着记忆）。兜底 / `timeout` / `jti` 三项已于当日复查后勾掉。
 
-1. ⬜ ⭐ **文章详情缓存的跨模块失效点** —— `KnowledgeCategoryService.deleteCategory` 会改 `article.category_id`，
-   但那边**没有 `@CacheEvict`**（`evictAfterCommit()` 只删 `cache:category:tree`）→ 那些文章缓存里的 `categoryName` **一直是旧的**。
-   （这是"缓存失效点散落在各个模块"的最好例子，面试能讲）**← 下一步第一件事**
+1. ✅ **文章详情缓存的跨模块失效点已修**（2026-10-14 核对代码）—— `KnowledgeCategoryService` 新增 `evictArticleCache(List<String>)`，两个 `deleteCategory` 都先捞 `affectedArticles` 再 `evictAfterCommit(articleIds)`，`article` 缓存里的 `categoryName` 不再脏读。（仍是"缓存失效点散落在各模块"的好素材，面试能讲）
 2. ✅ **防穿透已收尾** —— 见 8.4（`loadDetail:36` 已 `return null`）
 3. ✅ 已修：`ArticleContentService` 那句错注释（`//这里判断用户状态`）已经不在了
 4. ⬜ `ArticleReadCountTask:45` 的 `read_count = IFNULL(read_count,0) + delta` 仍是**裸字符串拼接**（来源是 Redis 的整数，
@@ -986,7 +992,7 @@ unless = "#result != null && #result.status != T(...ArticleStatus).PUBLISHED.get
 5. ⬜ `article:read:delta:<id>` **没有 TTL 兜底**（有回写补偿了，但进程直接挂掉时没人管）
 6. ✅ **Redis 读路径兜底已还清**（第 1 关欠的账）—— 4 处代码 + 1 处配置全部落地，清单见 **9.4**
 7. ✅ **`jti` 已补** —— `JwtTokenUtil:52` 已有 `.withJWTId(UUID.randomUUID().toString())`，同秒登录不再签出相同 token
-8. ⬜ 无用 import 清理：`UserService:3` logback `TimeUtil`、`:17` `CachePut`、`JwtAuthticationFilter:19` `Cacheable`；`UserService:36` 的 `redis` 字段加 `final`
+8. ⬜ 无用 import 清理（2026-10-14 复核，新增 2 处）：`UserService:3` logback `TimeUtil`、`:17` `CachePut`、`JwtAuthticationFilter:19` `Cacheable`、**`KnowledgeCategoryService:15` `RedisConnectionFailureException`**、**`CacheConfig:11-12` `CacheResolver`/`KeyGenerator`**；`UserService:36` 的 `redis` 字段加 `final`；`JwtAuthticationFilter:98-100` 三行注释掉的死代码删掉（fail-open 已定，留一行说明即可）
 9. ✅ **`timeout` 已从 `3000ms` 调到 `500ms`** —— 见 **9.7 治法①**；Redis 挂时分类树接口 9.07s → 约 1.5s
 
 ---
@@ -1283,4 +1289,95 @@ public class SimpleCircuitBreaker {
 
 ---
 
-*本文档最后更新：2026-10-13。换电脑后：装 Redis（下 Release 不是 Source）→ 拉 `AI-mentalHealthSystem` → 读本文档第 0 节继续。*
+## 十、第 4 关：热门文章排行榜（ZSet）（2026-10-14 起）
+
+> 状态：**✅ 已完成并落地**（2026-10-14）。收官记录见 **10.6**。
+
+### 10.1 定下的两个决策
+
+| 决策 | 选择 | 理由 |
+|---|---|---|
+| **热度语义** | **最近 7 天**（不是累计阅读量） | 累计会让老文章永远霸榜，"热门"退化成"最老" |
+| **数据来源** | **实时累加 + 定时预热** | 实时保证新鲜度；定时把 7 天合并好，读榜不用每次 `ZUNIONSTORE` |
+
+### 10.2 设计：天级 key 滑动窗口
+
+| 环节 | 做法 |
+|---|---|
+| **天级 key** | `article:hot:2026-10-14` —— `getArticleDetail` 里 `ZINCRBY ... 1 <id>`，**和 `INCR delta` 放同一个 try**（一起成功/失败，不产生偏差） |
+| **TTL = 8 天** | **必须显式 `expire`**（`incrementScore` 不管 TTL）。8 天 = 7 天窗口 + 1 天冗余 → **滚出窗口靠 TTL 自动完成，零清理任务**（同第 3 关黑名单的思想） |
+| **合并 key** | `article:hot:7d` —— 定时任务 `unionAndStore` 最近 7 个天级 key（**聚合默认 SUM**） |
+| **读榜** | `reverseRangeWithScores("article:hot:7d", 0, 9)` → 回库补全 → **按 ZSet 顺序重排** |
+
+### 10.3 ⚠️ 「7 天窗口」和「DB 定时校正」为什么打架
+
+一开始选了「7 天窗口 + 定时校正」，这两者在语义上冲突：
+
+- **DB 里只有累计 `read_count`，没有按天数据** → 定时任务拿不到"某一天读了多少"，无法校正某一天的 key
+- **"定时校正"只在累计榜上成立**（用 DB 权威总量覆盖 Redis 累加值）
+- 所以定时任务的角色要**从"校正数值"改成"合并预热"**（`ZUNIONSTORE`）
+- **7 天窗口天然不需要 DB 校正**：窗口滚动 = 自洁，7 天前的 key 自动消失，不积累漂移。只有**单调递增的累计榜**才会漂，才需要校正
+
+### 10.4 四个坑
+
+1. **时区** —— `LocalDate.now()` 用 JVM 默认时区；MySQL 配的是 `Asia/Shanghai`，两边可能不一致 → 跨零点 key 错位。统一，或显式 `LocalDate.now(ZoneId.of("Asia/Shanghai"))`
+2. **`incrementScore` 不设 TTL** —— 天级 key 的 8 天 TTL 必须**显式** `expire`
+3. **`selectBatchIds` 返回顺序不保证** —— 回库补全后必须**按 ZSet 顺序重排**，否则"第 1 名"会随机变
+4. **必须用 `StringRedisTemplate`** —— 用 JSON 序列化器会把 member 写成带引号的 `"a1b2..."`，`redis-cli` 里对不上（8.2 坑 3 的**第四次复现**）
+
+> 另：`score` 是 `double`；`KnowledgeArticle.id` 是 `String`（UUID）；`/knowledge/article/hot` 与 `/knowledge/article/{id}` 共存时**精确路径优先**。
+
+### 10.5 验收
+
+```bash
+redis-cli --raw --scan --pattern "article:hot:*"
+redis-cli --raw ZREVRANGE article:hot:7d 0 9 WITHSCORES
+redis-cli TTL article:hot:<今天>        # 约 8 天
+redis-cli TTL article:hot:7d            # 约 90 秒
+```
+
+### 10.6 ✅ 收官记录（2026-10-14）
+
+**最终实现（4 处）**
+
+| # | 位置 | 做什么 |
+|---|---|---|
+| 1 | `KnowledgeArticleService.getArticleDetail` | 非管理员分支里 `incrementScore("article:hot:"+今天, id, 1)` + `expire` 8 天（和 `INCR delta` 同一层 try） |
+| 2 | `ArticleReadCountTask.preheatArticleHot()` | 每 30 秒 `unionAndStore` 最近 7 个天级 key → `article:hot:7d`，`expire` 90 秒 |
+| 3 | `KnowledgeArticleService.getHotArticle()` | 取榜（**多取 `TOP*2`**）→ 保序取 id → 回库 + **过滤已发布** → `complementArticleDTO` 补名字 → 按榜单顺序取 + `limit(TOP)` |
+| 4 | `KnowledgeController` + 前端 | `GET /api/knowledge/article/hot`；前端「推荐阅读」改调它 |
+
+**定下来的设计（别再动摇）**
+
+| 决策 | 内容 |
+|---|---|
+| 热度语义 | **最近 7 天**（不是累计 `read_count`） |
+| 数据来源 | 实时 `ZINCRBY` 累加 + 定时 `ZUNIONSTORE` 预热 |
+| 天级 key TTL | **8 天**（7 天窗口 + 1 天冗余）→ 滚出窗口靠 TTL，**零清理任务** |
+| 合并 key TTL | **90 秒**（任务间隔 30 秒的 3 倍）→ 任务挂了能自愈，正常时不闪空 |
+| 读榜失败 | **返回空数组**（`List.of()`）+ 前端 `v-if="list.length"` 隐藏；**不回库**（DB 只有累计值，拿它冒充 7 天热度是**数据欺骗**） |
+| 过滤位置 | **补名字之前**（article 层）—— `complementArticleDTO` 只负责"补名字"，不该知道"已发布" |
+| 定时任务线程池 | `spring.task.scheduling.pool.size: 2`（默认 1 → 多个 `@Scheduled` 会串行） |
+
+**踩的坑**
+
+| # | 坑 | 后果 | 教训 |
+|---|---|---|---|
+| 1 | 🔴 **定时任务 key 少冒号**（`"article:hot"+日期`） | 与写入端 `"article:hot:"` 对不上 → 合并 7 个空 key → **榜单永远空** | 第 3 关「写读 key 不一致」的**同构复现**。key 拼接要收敛到常量/工具方法，别手写两遍 |
+| 2 | 过滤已发布放在"补名字之后" | 草稿白查作者名/分类名；过滤后可能不足 10 条 | 过滤前移 + 多取 2 倍 + `limit(TOP)`（`limit` 必须在 `filter(nonNull)` 之后） |
+| 3 | `TOP` 写在方法内还用 `private static final` | 编译不过（局部变量不能用 `private`/`static`） | 常量提到类字段 |
+| 4 | `Integer delta` / `increment(...).toString()` | IDE 警告 + NPE 风险 | 用 `int`；`Long v = increment(...)` 判 null 后 `.intValue()` |
+
+**顺带重构**：`complementArticleDTO` 从「只服务分页（`Page` → `IPage`）」改成「接收 `List<KnowledgeArticle>`、返回 `Map<id, DTO>`」—— `selectPage` 和 `getHotArticle` 共用，`getHotArticle` 里原来的 `byId` 中间变量因此删掉。
+
+**概念归档**
+
+- **ZSet 底层** = 跳表（按 score 排序，`ZREVRANGE` O(log N)）+ 哈希表（member→score，`ZSCORE` O(1)）→ 本质是"**按 value 排序的 Map**"
+- Java `switch` 的**箭头语法 `case X ->` 不穿透**，不需要 `break`（只有传统 `case X:` 才穿透）
+- `selectBatchIds` 查不到返回**空 List**（非 null），且**返回顺序不保证**
+- **`loadDetail` × N vs `selectBatchIds`**：前者缓存命中 0 次查询、未命中因 **N+1** 放大到 3N 次；后者恒定 3 次 → **稳定性 > 峰值性能**
+- `CacheManager` 是**注解流的后端接线员**（`@Cacheable → CacheInterceptor → CacheManager → Cache → RedisTemplate → Redis`），`StringRedisTemplate` 是手写流工具，两条流落在同一个 Redis
+
+---
+
+*本文档最后更新：2026-10-14。换电脑后：装 Redis（下 Release 不是 Source）→ 拉 `AI-mentalHealthSystem` → 读本文档第 0 节继续。*

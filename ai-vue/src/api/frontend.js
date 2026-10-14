@@ -32,6 +32,10 @@ export const getKnowledgeList=(params)=>{
     return service.get('/knowledge/article/page',{params})
 }
 
+export const getHotArticles=()=>{
+    return service.get('/knowledge/article/hot')
+}
+
 export const getKnowledgeDetail=(articleId)=>{
     return service.get(`/knowledge/article/${articleId}`)
 }

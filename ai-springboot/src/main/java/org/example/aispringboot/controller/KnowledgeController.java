@@ -113,6 +113,13 @@ public class KnowledgeController {
         return Result.success();
     }
 
+    @GetMapping("/knowledge/article/hot")
+    public Result<List<ArticleResponseDTO>> getHotArticles(@AuthenticationPrincipal UserLoginResponseDTO.UserDetailResponseDTO user){
+        log.debug("Id={}查询文章热度列表",user.getId());
+        List<ArticleResponseDTO> hotArticle=articleService.getHotArticle();
+        return Result.success(hotArticle);
+    }
+
 
 
     //-------------------------------------Consultation相关

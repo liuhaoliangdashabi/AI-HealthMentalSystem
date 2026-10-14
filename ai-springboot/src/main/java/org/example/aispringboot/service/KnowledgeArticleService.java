@@ -1,5 +1,6 @@
 package org.example.aispringboot.service;
 
+import com.aliyun.sdk.service.oss2.operations.ObjectBasic;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
@@ -29,11 +30,14 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 
+import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -53,8 +57,11 @@ public class KnowledgeArticleService {
     @Autowired
     private StringRedisTemplate redis;
 
-    String READ_DELTA_KEY="article:read:delta:";
-    String READ_DIRTY_KEY="article:read:dirty";
+    private static final String READ_DELTA_KEY="article:read:delta:";
+    private static final String READ_DIRTY_KEY="article:read:dirty";
+    private static final String DAY_HOT_KEY="article:hot:";
+
+    private static final int TOP=10;
 
     public IPage<ArticleResponseDTO> selectPage(ArticlePageQueryDTO query,
                                                 UserLoginResponseDTO.UserDetailResponseDTO user) {
@@ -72,7 +79,7 @@ public class KnowledgeArticleService {
                 KnowledgeArticle::getStatus,scopedStatus);
 
         //sortDirection 之前是"只写不读"——前端一直在传，后端一直忽略，永远只有降序。
-        //现在真正用上它（前端 C端推荐位传 readCount+desc，列表页传 publishedAt+desc）
+        //前端 C端推荐位传 readCount+desc，列表页传 publishedAt+desc
         String sortField=query.getSortField()==null?"":query.getSortField();
         boolean asc="asc".equalsIgnoreCase(query.getSortDirection());
         switch(sortField){
@@ -80,45 +87,19 @@ public class KnowledgeArticleService {
                 if(asc)qw.orderByAsc(KnowledgeArticle::getReadCount);
                 else   qw.orderByDesc(KnowledgeArticle::getReadCount);
             }
-            default->{
+            case "publishedAt"->{
                 if(asc)qw.orderByAsc(KnowledgeArticle::getPublishedAt);
                 else   qw.orderByDesc(KnowledgeArticle::getPublishedAt);
+            }
+            default ->{
+                log.warn("没见过这种排序:{}",sortField);
+                throw new BusinessException("不支持的排序字段");
             }
         }
 
         articleMapper.selectPage(page,qw);
-
-        List<KnowledgeArticle> articles=page.getRecords();
-        if(articles.isEmpty()){
-            return page.convert(a->null);
-        }
-
-        Set<Long> authorIds=articles.stream()
-                .map(KnowledgeArticle::getAuthorId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-        Map<Long,String> authorNameMap=authorIds.isEmpty()?Map.of():
-                userMapper.selectBatchIds(authorIds).stream()
-                        .collect(Collectors.toMap(User::getId,User::getDisplayName));
-        authorIds.removeAll(authorNameMap.keySet());
-        if(!authorIds.isEmpty())log.warn("这些作者id不存在，可能是脏数据：{}",authorIds);
-
-
-        Set<Long> categoryIds=articles.stream()
-                .map(KnowledgeArticle::getCategoryId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-        Map<Long,String> categoryNameMap=categoryIds.isEmpty()?Map.of():
-                categoryMapper.selectBatchIds(categoryIds).stream()
-                        .collect(Collectors.toMap(KnowledgeCategory::getId, KnowledgeCategory::getCategoryName));
-        categoryIds.removeAll(categoryNameMap.keySet());
-        if(!categoryIds.isEmpty())log.warn("这些作者id不存在，可能是脏数据:{}",categoryIds);
-
-
-        return page.convert(a-> withCoverUrl(KnowledgeConvert.articleToResponse(
-                    a,authorNameMap.get(a.getAuthorId()),
-                    categoryNameMap.get(a.getCategoryId())))
-        );
+        Map<String,ArticleResponseDTO> dtoMap=complementArticleDTO(page.getRecords());
+        return page.convert(a->dtoMap.get(a.getId()));
     }
 
     public void createArticle(@Valid ArticleCommandDTO commandDTO,Long id) {
@@ -160,18 +141,26 @@ public class KnowledgeArticleService {
 
         if(!isAdmin){
             //TODO(你)：写在这
-            Integer delta=0;
+            int delta=0;
             try {
-                delta = Integer.valueOf(redis.opsForValue().increment(READ_DELTA_KEY+id).toString());
+                Long v=redis.opsForValue().increment(READ_DELTA_KEY+id);
+                delta=(v==null?0:v.intValue());
             } catch (Exception e) {
-                log.warn("新增文章阅读增量失败，Redis挂了，快去修复",e);
+                log.warn("新增文章阅读增量缓存失败，Redis挂了，快去修复",e);
             }
             try {
                 redis.opsForSet().add(READ_DIRTY_KEY,id);
             } catch (Exception e) {
-                log.warn("设置新阅读文章失败，Redis挂了，快去修复",e);
+                log.warn("设置新阅读文章缓存失败，Redis挂了，快去修复",e);
             }
             dto.setReadCount((dto.getReadCount()==null?0:dto.getReadCount())+delta);
+            try{
+                final LocalDate NOW=LocalDate.now();
+                redis.opsForZSet().incrementScore(DAY_HOT_KEY+NOW,dto.getId(),1);
+                redis.expire(DAY_HOT_KEY+NOW, Duration.ofDays(8));
+            }catch(Exception e){
+                log.warn("设置文章日热度缓存失败，Redis挂了，快去修复");
+            }
         }
 
 
@@ -198,10 +187,64 @@ public class KnowledgeArticleService {
         }
     }
 
+    public List<ArticleResponseDTO> getHotArticle() {
+        Set<ZSetOperations.TypedTuple<String>> tuples;
+        try {
+            //榜单可能混着草稿/已删除文章，取2倍做冗余
+            tuples=redis.opsForZSet().reverseRangeWithScores("article:hot:7d",0,TOP*2-1);
+        } catch (Exception e) {
+            log.warn("获取热点文本列表失败，Redis挂了，快去修复",e);
+            return List.of();
+        }
+        if(tuples==null || tuples.isEmpty())return List.of();
+
+        List<String> hotIds=tuples.stream().map(ZSetOperations.TypedTuple::getValue).toList();
+        List<KnowledgeArticle> hotPublishedArticles=articleMapper.selectBatchIds(hotIds).stream()
+                .filter(a->ArticleStatus.PUBLISHED.getCode().equals(a.getStatus()))
+                .toList();
+
+        Map<String,ArticleResponseDTO> dtoMap=complementArticleDTO(hotPublishedArticles);
+        return hotIds.stream()
+                .map(dtoMap::get)
+                .filter(Objects::nonNull)
+                .limit(TOP)
+                .toList();
+    }
+
     private ArticleResponseDTO withCoverUrl(ArticleResponseDTO dto){
         dto.setCoverImageUrl(ossUtil.getUrl(dto.getCoverImage()));
         return dto;
     }
 
+    private Map<String,ArticleResponseDTO> complementArticleDTO(List<KnowledgeArticle> articles){
+        if(articles==null || articles.isEmpty())return Map.of();
+
+
+        Set<Long> authorIds=articles.stream()
+                .map(KnowledgeArticle::getAuthorId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long,String> authorNameMap=authorIds.isEmpty()?Map.of():
+                userMapper.selectBatchIds(authorIds).stream()
+                        .collect(Collectors.toMap(User::getId, User::getDisplayName));
+        authorIds.removeAll(authorNameMap.keySet());
+        if(!authorIds.isEmpty())log.warn("这类作者在库中查不到数据，可能是脏数据:{}",authorIds);
+
+        Set<Long> categoryIds=articles.stream()
+                .map(KnowledgeArticle::getCategoryId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long,String> categoryNameMap=categoryIds.isEmpty()?Map.of():
+                categoryMapper.selectBatchIds(categoryIds).stream()
+                        .collect(Collectors.toMap(KnowledgeCategory::getId,KnowledgeCategory::getCategoryName));
+        categoryIds.removeAll(categoryNameMap.keySet());
+        if(!categoryIds.isEmpty())log.warn("这类分类在库中查不到数据，可能是脏数据:{}",categoryIds);
+
+        return articles.stream().collect(Collectors.
+                toMap(KnowledgeArticle::getId,
+                        a->withCoverUrl(KnowledgeConvert.articleToResponse(a,
+                                authorNameMap.get(a.getAuthorId()),
+                                categoryNameMap.get(a.getCategoryId())))));
+    }
 }
 

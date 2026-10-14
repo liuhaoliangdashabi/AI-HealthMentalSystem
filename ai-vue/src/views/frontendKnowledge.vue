@@ -63,7 +63,7 @@
 <script setup>
 import {ref,reactive,onMounted} from 'vue'
 import iconUrl from '@/assets/book.png'
-import { getKnowledgeList } from '@/api/frontend'
+import { getKnowledgeList, getHotArticles } from '@/api/frontend'
 import dayjs from 'dayjs'
 import {useRouter} from 'vue-router'
 
@@ -98,15 +98,11 @@ const goToArticle=(id)=>{
 }
 
 onMounted(()=>{
-    const params={
-        sortField:'readCount',
-        sortDirection:'desc',
-        currentPage:1,
-        size:5
-    }
     getPageList()
-    getKnowledgeList(params).then(res=>{
-        recommendList.value=res.records
+    // 推荐阅读：改调「7 天热度榜」接口（后端 GET /knowledge/article/hot）
+    // ⚠️ 新接口返回【数组】，不再是分页对象 —— 所以直接取 res，没有 .records
+    getHotArticles().then(res=>{
+        recommendList.value=res
     })
 })
 
