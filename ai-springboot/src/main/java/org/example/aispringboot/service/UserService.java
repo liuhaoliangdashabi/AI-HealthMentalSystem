@@ -4,6 +4,7 @@ import ch.qos.logback.core.util.TimeUtil;
 import cn.hutool.crypto.digest.DigestUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.example.aispringboot.DTO.command.UserLoginCommandDTO;
 import org.example.aispringboot.DTO.command.UserRegisterCommandDTO;
@@ -22,6 +23,7 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Date;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 
@@ -33,6 +35,12 @@ public class UserService {
 
     private final BCryptPasswordEncoder passwordEncoder;
     private final JwtTokenUtil jwtTokenUtil;
+    private static final String LOGIN_TRY_USERNAME_KEY="login:try:username:";
+    private static final String LOGIN_USERNAME_BAN="login:ban:username:";
+    private static final String LOGIN_TRY_IP_KEY="login:try:username:";
+    private static final String LOGIN_IP_BAN="login:ban:username:";
+
+    private static final int LOGIN_REQUEST_LIMIT_TIME = 10;
     private StringRedisTemplate redis;
 
     public UserService(BCryptPasswordEncoder passwordEncoder,
@@ -44,7 +52,24 @@ public class UserService {
     }
 
     public UserLoginResponseDTO login(UserLoginCommandDTO commandDTO){
-        log.info("登录请求的service层：{}",commandDTO);
+        Long times=null;
+        String loginBan=null;
+        try {
+            long now=System.currentTimeMillis();
+            loginBan=redis.opsForValue().get(LOGIN_USERNAME_BAN);
+            redis.opsForZSet().add(LOGIN_TRY_USERNAME_KEY+commandDTO.getUsername(),now+"-"+ UUID.randomUUID(),now);
+            redis.opsForZSet().removeRangeByScore(LOGIN_TRY_USERNAME_KEY+commandDTO.getUsername(),0,now-60000);
+            times=redis.opsForZSet().zCard(LOGIN_TRY_USERNAME_KEY+commandDTO.getUsername());
+            redis.expire(LOGIN_TRY_USERNAME_KEY+commandDTO.getUsername(), Duration.ofMinutes(1));
+        } catch (Exception e) {
+            log.warn("登录请求做滑动窗口限流失败,快去维修",e);
+        }
+        if(times!=null && times>LOGIN_REQUEST_LIMIT_TIME || loginBan!=null && loginBan.equals("1")){
+            loginBanUsername(commandDTO.getUsername());
+            throw new BusinessException("当前用户请求次数过多，已被拉黑，请联系管理员");
+        }
+
+        //检验结束，业务开始
         LambdaQueryWrapper<User> queryWrapper=new LambdaQueryWrapper<>();
         queryWrapper.eq(User::getUsername,commandDTO.getUsername())
                 .or()
@@ -69,6 +94,12 @@ public class UserService {
         String token= jwtTokenUtil.generateToken(user.getId(),user.getUsername(),user.getUserType());
         UserLoginResponseDTO.UserDetailResponseDTO userInfo= UserConvert.entityToDetailResponse(user);
         log.debug("走到这里，用户信息和装填已经获取，准备装填并返回");
+
+        try{
+            redis.delete(LOGIN_TRY_USERNAME_KEY+commandDTO.getUsername());
+        }catch(Exception e){
+            log.warn("用户重复登陆次数删除失败！",e);
+        }
         return UserConvert.buildLoginResponse(token,userInfo);
     }
 
@@ -122,5 +153,37 @@ public class UserService {
             log.error("登出写黑名单失败，Redis出问题了，赶紧修复！",e);
             throw new BusinessException("登出失败，请重试");
         }
+    }
+
+    public void loginBanUsername(String username){
+        try{
+            redis.opsForValue().set(LOGIN_USERNAME_BAN+username,"1",Duration.ofHours(3));
+        }catch(Exception e){
+            log.warn("登录超限加入黑名单失败，赶快修复",e);
+        }
+    }
+
+    private void checkIpLimit(HttpServletRequest request){
+        String ip=getClientIp(request);
+        Long times=null;
+        String loginBan=null;
+        try {
+            long now=System.currentTimeMillis();
+            loginBan=redis.opsForValue().get(LOGIN_IP_BAN);
+            redis.opsForZSet().add(LOGIN_TRY_IP_KEY+ip,now+"-"+ UUID.randomUUID(),now);
+            redis.opsForZSet().removeRangeByScore(LOGIN_TRY_IP_KEY+ip,0,now-60000);
+            times=redis.opsForZSet().zCard(LOGIN_TRY_IP_KEY+ip);
+            redis.expire(LOGIN_TRY_IP_KEY+ip, Duration.ofMinutes(1));
+        } catch (Exception e) {
+            log.warn("登录请求做滑动窗口限流失败,快去维修",e);
+        }
+        if(times!=null && times>LOGIN_REQUEST_LIMIT_TIME || loginBan!=null && loginBan.equals("1")){
+            loginBanIP(ip);
+            throw new BusinessException("当前用户请求次数过多，已被拉黑，请联系管理员");
+        }
+    }
+
+    private String getClientIp(HttpServletRequest request){
+        return request.getRemoteAddr();
     }
 }
