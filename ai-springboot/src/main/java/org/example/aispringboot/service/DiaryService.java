@@ -82,11 +82,6 @@ public class DiaryService {
         }
         if(Boolean.FALSE.equals(locked)){
             log.info("日记重复提交，用户Id={}",userId);
-            try{
-                redis.expire(DIARY_DUP_LOCK+userId,Duration.ofSeconds(5));
-            }catch(Exception e){
-                log.warn("用户提交日记检锁失败，快去修复",e);
-            }
             throw new BusinessException("请勿重复提交日记");
         }
         EmotionDiary diary=DiaryConvert.commandToEntity(commandDTO,userId);

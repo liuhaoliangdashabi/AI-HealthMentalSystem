@@ -1453,6 +1453,36 @@ redis-cli TTL article:hot:7d            # 约 90 秒
 - 若真要优化：**BCrypt 异步化**（丢到独立线程池，线程数 ≈ **核数 + 1**，Tomcat 线程立刻释放）。⚠️ 异步线程里 `RequestContextHolder` **拿不到 request** —— 必须提前把 IP 等纯数据取出来再传进去
 - 其他低成本项：`WHERE username = ? OR email = ?` 用 `EXPLAIN` 看是否全表扫描（OR 条件难走索引）；前端做 token 续期，减少登录接口调用频次
 
+### 11.6 ⏭️ 后续规划：「手写流 → 注解流」统一改造（第 7 关之后做）
+
+**决定（2026-10-15）**：用户决定**先做完第 7 关**，再把项目里「能换成注解流的手写流」逐步换掉。**`@RateLimit` 属于这一批，不是漏做。**
+
+**为什么先不做**：第 7 关要试 5 种高级数据结构（String+JSON / BitMap / HyperLogLog / Stream / 秒传），会写出更多"手写流"。**等模式铺开、看清哪些真的重复了再抽象，比现在提前抽更准** —— 提前抽容易抽错。
+
+**要改造的清单（届时核对）**
+
+| 现在（手写流） | 目标（注解流） | 值不值得 |
+|---|---|---|
+| `UserService.checkIpLimit` + `login` 里的滑动窗口 | `@RateLimit` + `@Aspect` | ⭐⭐⭐ **最该抽** —— login / register 各抄了一遍 |
+| `KnowledgeCategoryService.listAll` 手写 Cache Aside | 看是否换 `@Cacheable` | ⭐ 它需要 `try-catch` 降级 + 复杂 key，换注解可能反而失控 |
+| `DiaryService` 的 `SET NX` 防重 | 可选 `@Idempotent` | ⭐ 只有 1 个调用点，暂时不值得 |
+
+**⚠️ 抽象前先问三个问题**（避免为抽象而抽象）：
+1. **重复了几次？** 只出现 1 次的逻辑，抽出来只是把代码搬到另一个文件
+2. **逻辑稳定吗？** 还在改的逻辑，抽成注解后改起来更麻烦
+3. **出问题好不好查？** 注解流 = 多一层代理，调试成本上升（回想第 1 关查 `@Cacheable` 不生效花了多久）
+
+**注解流的 4 个失效条件**（跟 `@Cacheable` **完全同构**，可直接复用第 1 关经验）：
+1. 类不是 Spring bean → 没有代理
+2. `this.xxx()` 内部调用 → 不走代理
+3. 方法不是 `public` → CGLIB 拦不住
+4. 注解 `@Retention` 不是 `RUNTIME` → 反射读不到
+
+**配套：反代 IP 的处理（部署前必修，本地不用动）**
+- **最省事的后端兜底**：Spring Boot 内置 `server.tomcat.remoteip.remote-ip-header: X-Forwarded-For`（底层是 Tomcat 的 `RemoteIpValve`）→ **`getRemoteAddr()` 自动返回真实 IP，业务代码一行不用改**（另需 `internal-proxies` 声明可信代理，防伪造）
+- 另一条路：**PROXY Protocol**（TCP 层传真实 IP，不依赖 HTTP header）
+- 拿不到真实 IP 时的降级：**用户名维度限流**（已有，防撞库，不依赖 IP）+ 全局兜底限流 + Nginx 层 `limit_req`（Nginx 天然知道真实 IP，且不占后端资源）
+
 **概念归档**
 
 - **ZSet 底层** = 跳表（按 score 排序，`ZREVRANGE` O(log N)）+ 哈希表（member→score，`ZSCORE` O(1)）→ 本质是"**按 value 排序的 Map**"
