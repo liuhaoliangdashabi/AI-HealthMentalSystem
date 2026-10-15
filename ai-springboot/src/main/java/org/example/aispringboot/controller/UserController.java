@@ -3,6 +3,7 @@ package org.example.aispringboot.controller;
 import cn.hutool.crypto.digest.DigestUtil;
 import cn.hutool.json.JSONUtil;
 import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.example.aispringboot.DTO.command.DiaryCommandDTO;
@@ -37,16 +38,18 @@ public class UserController {
 
 
     @PostMapping("/user/login")
-    public Result<UserLoginResponseDTO> login(@Valid @RequestBody UserLoginCommandDTO commandDTO) {
+    public Result<UserLoginResponseDTO> login(@Valid @RequestBody UserLoginCommandDTO commandDTO,
+                                              HttpServletRequest request) {
         log.debug("登录请求的controller层，username = {}", commandDTO.getUsername());
-        UserLoginResponseDTO responseDTO = userService.login(commandDTO);
+        UserLoginResponseDTO responseDTO = userService.login(commandDTO,request);
         return Result.success(responseDTO);
     }
 
     @PostMapping("/user/add")
-    public Result<UserLoginResponseDTO.UserDetailResponseDTO> register(@Valid @RequestBody UserRegisterCommandDTO commandDTO) {
+    public Result<UserLoginResponseDTO.UserDetailResponseDTO> register(@Valid @RequestBody UserRegisterCommandDTO commandDTO,
+                                                                       HttpServletRequest request) {
         log.debug("注册请求的controller层：{}", commandDTO);
-        UserLoginResponseDTO.UserDetailResponseDTO result = userService.register(commandDTO);
+        UserLoginResponseDTO.UserDetailResponseDTO result = userService.register(commandDTO,request);
         return Result.success(result);
     }
 

@@ -75,11 +75,12 @@ public class DiaryService {
     public void addEmotionDiary(DiaryCommandDTO commandDTO, Long userId) {
         Boolean locked=null;
         try {
+            //写一篇日记15s，这也不算是什么人类了
             locked=redis.opsForValue().setIfAbsent(DIARY_DUP_LOCK+userId,"1", Duration.ofSeconds(15));
         } catch (Exception e) {
             log.warn("用户提交日记加锁失败，Redis挂了，快去修复",e);
         }
-        if(!locked){
+        if(Boolean.FALSE.equals(locked)){
             log.info("日记重复提交，用户Id={}",userId);
             try{
                 redis.expire(DIARY_DUP_LOCK+userId,Duration.ofSeconds(5));

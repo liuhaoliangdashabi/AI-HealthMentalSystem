@@ -1,6 +1,7 @@
 package org.example.aispringboot.service;
 
 import ch.qos.logback.core.util.TimeUtil;
+import cn.hutool.core.date.StopWatch;
 import cn.hutool.crypto.digest.DigestUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import jakarta.annotation.Resource;
@@ -37,10 +38,11 @@ public class UserService {
     private final JwtTokenUtil jwtTokenUtil;
     private static final String LOGIN_TRY_USERNAME_KEY="login:try:username:";
     private static final String LOGIN_USERNAME_BAN="login:ban:username:";
-    private static final String LOGIN_TRY_IP_KEY="login:try:username:";
-    private static final String LOGIN_IP_BAN="login:ban:username:";
+    private static final String LOGIN_TRY_IP_KEY="login:try:ip:";
+    private static final String LOGIN_IP_BAN="login:ban:ip:";
 
-    private static final int LOGIN_REQUEST_LIMIT_TIME = 10;
+    private static final int LOGIN_REQUEST_USERNAME_LIMIT_TIME = 10;
+    private static final int LOGIN_REQUEST_IP_LIMIT_TIME = 30;
     private StringRedisTemplate redis;
 
     public UserService(BCryptPasswordEncoder passwordEncoder,
@@ -51,12 +53,14 @@ public class UserService {
         this.redis=redis;
     }
 
-    public UserLoginResponseDTO login(UserLoginCommandDTO commandDTO){
+    public UserLoginResponseDTO login(UserLoginCommandDTO commandDTO,
+                                      HttpServletRequest request){
+        checkIpLimit(request);
         Long times=null;
         String loginBan=null;
         try {
             long now=System.currentTimeMillis();
-            loginBan=redis.opsForValue().get(LOGIN_USERNAME_BAN);
+            loginBan=redis.opsForValue().get(LOGIN_USERNAME_BAN+commandDTO.getUsername());
             redis.opsForZSet().add(LOGIN_TRY_USERNAME_KEY+commandDTO.getUsername(),now+"-"+ UUID.randomUUID(),now);
             redis.opsForZSet().removeRangeByScore(LOGIN_TRY_USERNAME_KEY+commandDTO.getUsername(),0,now-60000);
             times=redis.opsForZSet().zCard(LOGIN_TRY_USERNAME_KEY+commandDTO.getUsername());
@@ -64,7 +68,7 @@ public class UserService {
         } catch (Exception e) {
             log.warn("登录请求做滑动窗口限流失败,快去维修",e);
         }
-        if(times!=null && times>LOGIN_REQUEST_LIMIT_TIME || loginBan!=null && loginBan.equals("1")){
+        if(times!=null && times>LOGIN_REQUEST_USERNAME_LIMIT_TIME || loginBan!=null && loginBan.equals("1")){
             loginBanUsername(commandDTO.getUsername());
             throw new BusinessException("当前用户请求次数过多，已被拉黑，请联系管理员");
         }
@@ -82,11 +86,12 @@ public class UserService {
         }
 
         String inputPassword=commandDTO.getPassword().trim();
-        if(!passwordEncoder.matches(inputPassword,user.getPassword())){
+        Boolean passwordMatch=passwordEncoder.matches(inputPassword,user.getPassword());
+        if(!passwordMatch.equals(Boolean.TRUE)){
             log.warn("登陆失败，密码错误，userId={}",user.getId());
             throw new BusinessException("密码错误");
         }
-        if(!user.isActive()){
+            if(!user.isActive()){
             log.warn("登陆失败，用户被禁用，userId={}",user.getId());
             throw new BusinessException("用户已被禁用，请联系管理员");
         }
@@ -94,7 +99,7 @@ public class UserService {
         String token= jwtTokenUtil.generateToken(user.getId(),user.getUsername(),user.getUserType());
         UserLoginResponseDTO.UserDetailResponseDTO userInfo= UserConvert.entityToDetailResponse(user);
         log.debug("走到这里，用户信息和装填已经获取，准备装填并返回");
-
+        log.info(sw.prettyPrint());
         try{
             redis.delete(LOGIN_TRY_USERNAME_KEY+commandDTO.getUsername());
         }catch(Exception e){
@@ -103,7 +108,9 @@ public class UserService {
         return UserConvert.buildLoginResponse(token,userInfo);
     }
 
-    public UserLoginResponseDTO.UserDetailResponseDTO register(UserRegisterCommandDTO commandDTO){
+    public UserLoginResponseDTO.UserDetailResponseDTO register(UserRegisterCommandDTO commandDTO,
+                                                               HttpServletRequest request){
+        checkIpLimit(request);
         if(!commandDTO.getPassword().equals(commandDTO.getConfirmPassword())){
             throw new BusinessException("两次输入密码不一致");
         }
@@ -157,9 +164,9 @@ public class UserService {
 
     public void loginBanUsername(String username){
         try{
-            redis.opsForValue().set(LOGIN_USERNAME_BAN+username,"1",Duration.ofHours(3));
+            redis.opsForValue().set(LOGIN_USERNAME_BAN+username,"1",Duration.ofMinutes(3));
         }catch(Exception e){
-            log.warn("登录超限加入黑名单失败，赶快修复",e);
+            log.warn("登录超限,用户名username={}加入黑名单失败，赶快修复",username,e);
         }
     }
 
@@ -169,7 +176,7 @@ public class UserService {
         String loginBan=null;
         try {
             long now=System.currentTimeMillis();
-            loginBan=redis.opsForValue().get(LOGIN_IP_BAN);
+            loginBan=redis.opsForValue().get(LOGIN_IP_BAN+ip);
             redis.opsForZSet().add(LOGIN_TRY_IP_KEY+ip,now+"-"+ UUID.randomUUID(),now);
             redis.opsForZSet().removeRangeByScore(LOGIN_TRY_IP_KEY+ip,0,now-60000);
             times=redis.opsForZSet().zCard(LOGIN_TRY_IP_KEY+ip);
@@ -177,7 +184,7 @@ public class UserService {
         } catch (Exception e) {
             log.warn("登录请求做滑动窗口限流失败,快去维修",e);
         }
-        if(times!=null && times>LOGIN_REQUEST_LIMIT_TIME || loginBan!=null && loginBan.equals("1")){
+        if(times!=null && times>LOGIN_REQUEST_IP_LIMIT_TIME || loginBan!=null && loginBan.equals("1")){
             loginBanIP(ip);
             throw new BusinessException("当前用户请求次数过多，已被拉黑，请联系管理员");
         }
@@ -185,5 +192,13 @@ public class UserService {
 
     private String getClientIp(HttpServletRequest request){
         return request.getRemoteAddr();
+    }
+
+    private void loginBanIP(String ip){
+        try{
+            redis.opsForValue().set(LOGIN_IP_BAN+ip,"1",Duration.ofMinutes(3));
+        }catch(Exception e){
+            log.warn("登录超限，用户IP={}加入黑名单失败",ip,e);
+        }
     }
 }
