@@ -99,7 +99,6 @@ public class UserService {
         String token= jwtTokenUtil.generateToken(user.getId(),user.getUsername(),user.getUserType());
         UserLoginResponseDTO.UserDetailResponseDTO userInfo= UserConvert.entityToDetailResponse(user);
         log.debug("走到这里，用户信息和装填已经获取，准备装填并返回");
-        log.info(sw.prettyPrint());
         try{
             redis.delete(LOGIN_TRY_USERNAME_KEY+commandDTO.getUsername());
         }catch(Exception e){

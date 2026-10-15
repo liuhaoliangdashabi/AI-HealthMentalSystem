@@ -2,7 +2,7 @@
 
 > **这是本项目的唯一进度文档。** 想知道「Redis 接得怎么样了、下一步干什么」，读这一篇就够了，不用翻别的文件，也不用重新扫代码。
 >
-> 更新日期：**2026-10-14**
+> 更新日期：**2026-10-15**
 >
 > `docs/` 下另外两篇（`DTO怎么写.md`、`事务练习-删除知识分类.md`）是**知识笔记**，不含进度信息。
 >
@@ -20,7 +20,10 @@
 
 **第 4 关收官记录见第十节**（2026-10-14）：定为「**最近 7 天热度**」+「**天级 key 实时累加 + 定时 `ZUNIONSTORE` 预热**」，前端「推荐阅读」已从累计榜切到新接口。
 
-**下一步：第 5 关（限流 + 防重复提交）**（需求原文见第四节）。
+**🔧 第 5 关（限流 + 防重复提交）主体已完成**（2026-10-15，记录见**第十一节**）：
+场景 A（登录/注册限流，滑动窗口 + 用户名/IP 双维度）和场景 B（日记 `SET NX` 防重）**均已实现并实测**；两个编译错误已清。
+⏭️ **`@RateLimit` 注解 + 切面「有意推迟」** —— 用户决定**做完第 7 关后**统一做「手写流 → 注解流」改造（见 **11.6**）。**这不是漏做，是有意安排。**
+⚠️ 还剩 **2 处**待修（清单见 **11.4**）：`getClientIp` 的代理 IP 问题、`DiaryService` 的 `expire` 段。
 
 **还剩几笔小账**（不急，见 8.6）：裸拼 SQL / 增量 key 无 TTL。
 
@@ -35,7 +38,7 @@
 | **第 3 关** | JWT 登出黑名单 ⭐ 最出彩 | ✅ **完成**（2026-10-13，收官记录见**第九节**） |
 | **兜底账** | 第 1 关欠的读路径降级 + `timeout` 调优 | ✅ **完成**（2026-10-13，清单见 **9.4**） |
 | **第 4 关** | 热门文章排行榜（ZSet） | ✅ **完成**（2026-10-14，收官记录见**第十节**） |
-| 第 5 关 | 限流 + 防重复提交 | ⬜ 未开始 |
+| **第 5 关** | 限流 + 防重复提交 | 🔧 **主体完成**（2026-10-15，见**第十一节**）；⏭️ 注解流改造**推迟到第 7 关后**（见 11.6）；剩 2 处小修（见 11.4） |
 | 第 6 关 | 分布式锁 | ⬜ 未开始 |
 | 第 7 关 | 高级数据结构 | ⬜ 未开始 |
 | 第 8 关 | 面试包装 | ⬜ 未开始 |
@@ -55,7 +58,9 @@
 | `controller/KnowledgeController.java` | ✅ 第 4 关：`GET /api/knowledge/article/hot` |
 | `ai-vue/src/views/frontendKnowledge.vue` | ✅ 第 4 关：「推荐阅读」改调 `/knowledge/article/hot`（原先是 `sortField=readCount` 的**累计榜**） |
 | `ai-vue/src/api/frontend.js` | ✅ 第 4 关：新增 `getHotArticles()` |
-| `service/UserService.java` | ✅ 第 3 关：`logout(token)` 写黑名单（`StringRedisTemplate` + TTL=剩余有效期，**fail-closed**） |
+| `service/UserService.java` | ✅ 第 3 关：`logout(token)` 写黑名单（`StringRedisTemplate` + TTL=剩余有效期，**fail-closed**）；🔧 **第 5 关：`login` / `register` 开头 `checkIpLimit(request)`，用户名维度 + IP 维度双滑动窗口，超限写 3 分钟黑名单** |
+| `service/DiaryService.java` | 🔧 **第 5 关：`addEmotionDiary` 用 `SET NX` 防重**（`diary:dup:<userId>`，TTL 15 秒；⚠️ 成功后**不删**锁，等它自然过期） |
+| `controller/UserController.java` | 🔧 **第 5 关：`login` / `register` 方法签名补 `HttpServletRequest` 并透传给 Service** |
 | `util/JwtAuthticationFilter.java` | ✅ 第 3 关：黑名单校验（**fail-open**，Redis 挂则放行） |
 | `util/JwtTokenUtil.java` | ✅ `generateToken` 带 **`jti`**（`.withJWTId(UUID...)`）—— 同用户同秒登录不再签出相同 token |
 
@@ -70,6 +75,11 @@
 | `blacklist:token:<md5(token)>` | 第 3 关 | String，TTL = token **剩余**有效期；⚠️ key 必须 md5，**读写两边要一致** |
 | `article:hot:<yyyy-MM-dd>` | 第 4 关 | ZSet，当天热度；TTL **8 天**（自动滚出窗口）；⚠️ **冒号别漏**（`article:hot:` 不是 `article:hot`） |
 | `article:hot:7d` | 第 4 关 | ZSet，最近 7 天合并榜；定时任务每 30 秒重建，TTL **90 秒** |
+| `login:try:username:<username>` | 第 5 关 | ZSet 滑动窗口（member = `时间戳-UUID`，score = 时间戳）；60 秒内 > **10** 次 → 封 |
+| `login:ban:username:<username>` | 第 5 关 | String，用户名黑名单；TTL **3 分钟**；⚠️ 读和写都要拼 `<username>` 后缀 |
+| `login:try:ip:<ip>` | 第 5 关 | ZSet 滑动窗口；60 秒内 > **30** 次 → 封；⚠️ `login` 与 `register` **共用**这一个 key |
+| `login:ban:ip:<ip>` | 第 5 关 | String，IP 黑名单；TTL **3 分钟**；⚠️ 读和写都要拼 `<ip>` 后缀 |
+| `diary:dup:<userId>` | 第 5 关 | String（`SET NX` 防重锁）；TTL **15 秒**；⚠️ 成功提交后**不要** `delete`，等它自然过期 |
 
 ### 0.4 下一步就做这个
 
@@ -86,7 +96,13 @@
 
 **第 4 关 ✅ 已完成**（2026-10-14，收官记录见**第十节**）。
 
-**下一步：第 5 关（限流 + 防重复提交）**（需求原文见第四节）。
+**🔧 第 5 关主体完成**（2026-10-15，记录见**第十一节**）。两个编译错误已清（`sw.prettyPrint()` 已删、`BCryptExecute.java` 已删）。**剩余**：
+
+1. 🟡 **`DiaryService:86` 的 `expire` 段建议整段删掉** —— `expire` 本身就是**续期**操作，与"防续期"的意图相反；被脚本反复触发会把锁无限续期。（当前只能锁死攻击者自己，影响有限，但**逻辑是错的**，面试被问到会答不上来）
+2. 🟡 **`getClientIp()` 仍只取 `getRemoteAddr()`** —— **本地无 Nginx 时不影响**（现在的写法就是对的），但**部署到有反代的服务器之前必修**，否则所有用户共用一个 IP → 全体被封。详见 11.4 与 11.6
+3. 🟢 `DiaryService:40` `IP_LIMIT_KEY` 定义了没用；`:84` 的 `log.info` 建议降为 `debug`
+
+**⏭️ 已决定推迟**：`@RateLimit` 注解 + 切面 —— 做完第 7 关后统一做「手写流 → 注解流」改造（见 **11.6**）。**这不是漏做，是有意安排。**
 
 **顺带清了 8.6-#1**（跨模块失效点，已完成）。剩余小账（见 8.6）：`ArticleReadCountTask:45` 裸拼 SQL、`article:read:delta:<id>` 无 TTL。
 
@@ -152,7 +168,7 @@
 | `controller/KnowledgeController.java:38` `categoryTree()` | 每次请求都查库 | 分类树读多写少、变更极少 → 缓存收益率最高 |
 | `controller/KnowledgeController.java:92` `getArticleDetail()` | 每次请求都查库 | 文章详情是典型热点读 |
 | `entity/UserFavorite.java` | 只有 `(userId, articleId)`，无去重保障 | 收藏/点赞去重 → Set；计数 → `INCR` |
-| `controller/UserController.java:30` `login()` | 无限流 | 登录接口是撞库的天然目标 → `INCR`+`EXPIRE` 限流 |
+| `controller/UserController.java:40` `login()` | ~~无限流~~ **已限流 ✅**（第 5 关） | 登录接口是撞库的天然目标 → 已用**滑动窗口 + 双维度黑名单**解决，见**第十一节** |
 | `controller/UserController.java:57` `addEmotionDiary()` | 无幂等 | 前端狂点会写入多条日记 → `SET NX` 防重 |
 | `common/FileCleanupTask.java` + `entity/SysFileInfo.java` | 定时清理临时文件 | 多实例部署会重复跑 → 分布式锁 |
 | `entity/AiAnalysisTask.java` | 有 `status`/`priority`/`retryCount`/`maxRetryCount` | 这本身就是一张任务队列表 → Stream / ZSet 延时队列 |
@@ -218,7 +234,7 @@ TTL cache:category:tree       # -1 永久 / -2 不存在 / 正数 = 剩余秒
 | 项 | 内容 |
 |---|---|
 | **锚点** | `pom.xml`、`src/main/resources/application.yml`、`config/RedisConfig.java` |
-| **方案** | `spring-boot-starter-data-redis`（**不写 version**，由 Boot parent 管）；`spring.data.redis.host/port/database/timeout`；`RedisConfig` 暴露 `RedisTemplate<String,Object>`（JSON 序列化） |
+| **方案** | `spring-boot-starter-data-redis`（**不写 version**，由 Boot parent 管）；`spring.data.redis.host/port/database/timeout`；`redisconfig` 暴露 `RedisTemplate<String,Object>`（JSON 序列化） |
 | **产出** | `config/RedisConfig.java`（实际实现见附录 A）；能同时注入 `StringRedisTemplate` 和 `RedisTemplate<String,Object>` |
 | **验收** | ✅ 启动不报错；✅ 测试 `src/test/java/.../Test/Redis/RedisStartTest.java` 跑通；✅ `redis-cli --raw GET <key>` 看到干净 JSON |
 | **顺带完成** | 用户把 **8 个 response DTO 全都补了 `@NoArgsConstructor + @AllArgsConstructor`**（原计划留到第 1 关做） |
@@ -332,13 +348,13 @@ JWT 是**无状态**的，token 一旦签发，在过期前永远有效。所以
 
 ---
 
-### 第 5 关：限流 + 防重复提交
+### 第 5 关：限流 + 防重复提交 🔧 进行中（2026-10-15 起，记录见第十一节）
 
 **场景 A：登录接口限流**
 
 | 项 | 内容 |
 |---|---|
-| **锚点** | `controller/UserController.java:30` `login()` |
+| **锚点** | `controller/UserController.java:40` `login()` + `:48` `register()`（**实际两个都接了限流**） |
 | **方案** | 固定窗口：`INCR login:try:<username>:<minute>` + `EXPIRE 60`；超阈值拒绝 |
 | **四算法取舍** | 固定窗口（最简单，有**临界问题**：59s 和 61s 各打满一轮 = 2 倍流量）/ 滑动窗口（ZSet 存时间戳，精确但费内存）/ 令牌桶（允许突发，最常用）/ 漏桶（恒定速率） |
 | **产出** | `@RateLimit` 注解 + 拦截器（可复用） |
@@ -439,7 +455,7 @@ dto = list.stream()
 
 **注意**：Spring Boot 自动配置的那个 `ObjectMapper`（给 HTTP 接口用的）**跟它毫无关系**，所以接口一直正常 —— 这个坑只在 Redis 这条线上出现。
 
-**修法**：`RedisConfig` 里 `json.configure(mapper -> {...})`，见附录 A。
+**修法**：`redisconfig` 里 `json.configure(mapper -> {...})`，见附录 A。
 
 #### 坑 C：`log.debug(..., dto.size())` 写在判空之前 → NPE
 
@@ -784,7 +800,7 @@ public void deleteCategory(Long id) {
 
 1. **序列化器带不带 2** —— 最高频，见第三章坑 1
 2. **往 Redis 塞 `List.of()` / `stream().toList()`** —— 写的时候不报错，读的时候才炸，见 5.1 坑 A
-3. **`RedisConfig` 忘了挂 `JavaTimeModule`** —— 带 `LocalDateTime` 的对象**写**的时候就抛，见 5.1 坑 B
+3. **`redisconfig` 忘了挂 `JavaTimeModule`** —— 带 `LocalDateTime` 的对象 **写**的时候就抛，见 5.1 坑 B
 4. **读写 key 不一致** —— 「接口返回数据」≠「缓存生效」，判据是 MyBatis 日志，见 5.1 坑 D
 5. **evict 跑在事务提交前** —— 脏缓存窗口，见 5.4
 6. **evict 失败反噬主业务** —— 异常冒泡导致整个删除事务回滚，见 5.4
@@ -864,7 +880,9 @@ public class RedisConfig {
 | `config/RedisConfig.java` | ✅ 已建 |
 | `service/KnowledgeCategoryService.java` | **第 1 关主战场**（`listAll` ✅ / 两处 `deleteCategory` ❌） |
 | `controller/KnowledgeController.java` | 第 1 关（分类树 :38、两个删除 :46/:54、文章详情 :92）、第 7 关（秒传 :139） |
-| `controller/UserController.java` | 第 3 关（logout :51）、第 5 关（login :30、日记防重 :57） |
+| `controller/UserController.java` | 第 3 关（logout :63）、第 5 关（login :40、register :48、日记防重 :71） |
+| `service/UserService.java` | 第 3 关（logout 黑名单）、第 5 关（login/register 限流 + 双黑名单） |
+| `service/DiaryService.java` | 第 5 关（`addEmotionDiary` 的 `SET NX` 防重） |
 | `util/JwtAuthticationFilter.java` | 第 3 关（黑名单校验） |
 | `common/FileCleanupTask.java` | 第 6 关（分布式锁） |
 | `service/AnalyticsService.java` | 第 7 关（UV / 统计缓存） |
@@ -1098,7 +1116,7 @@ unless = "#result != null && #result.status != T(...ArticleStatus).PUBLISHED.get
 
 **抛出点**：`ArticleReadCountTask:40` `Integer.valueOf(deltaStr)` —— 全项目**唯一**做「字符串转整数」的地方。
 
-**最可能的原因：序列化器污染。** 若有任何地方用 `RedisTemplate<String,Object>`（`RedisConfig` 里那个 JSON 序列化器）往同一个 key 写过 String，Jackson 会**带引号**存 → Redis 里是 `"1"` → `StringRedisTemplate` 读回来是带引号的 `"1"` → `Integer.valueOf("\"1\"")` 炸。**又是 8.2 坑 3 那一族。**
+**最可能的原因：序列化器污染。** 若有任何地方用 `RedisTemplate<String,Object>`（`redisconfig` 里那个 JSON 序列化器）往同一个 key 写过 String，Jackson 会**带引号**存 → Redis 里是 `"1"` → `StringRedisTemplate` 读回来是带引号的 `"1"` → `Integer.valueOf("\"1\"")` 炸。**又是 8.2 坑 3 那一族。**
 
 **诊断命令**：
 
@@ -1369,6 +1387,71 @@ redis-cli TTL article:hot:7d            # 约 90 秒
 | 4 | `Integer delta` / `increment(...).toString()` | IDE 警告 + NPE 风险 | 用 `int`；`Long v = increment(...)` 判 null 后 `.intValue()` |
 
 **顺带重构**：`complementArticleDTO` 从「只服务分页（`Page` → `IPage`）」改成「接收 `List<KnowledgeArticle>`、返回 `Map<id, DTO>`」—— `selectPage` 和 `getHotArticle` 共用，`getHotArticle` 里原来的 `byId` 中间变量因此删掉。
+
+---
+
+## 十一、第 5 关：限流 + 防重复提交（2026-10-15 起）
+
+> 状态：**🔧 进行中**。场景 A / B **主体已实现并实测**；`@RateLimit` 注解 + 拦截器**未做**。
+> ⚠️ **接手前先看 11.4 待办** —— 里面有 1 处编译错误。
+
+### 11.1 实际落地（跟原方案的差异）
+
+| 场景 | 原方案（第四节） | **实际实现** | 为什么改 |
+|---|---|---|---|
+| **A 登录限流** | 固定窗口 `INCR login:try:<username>:<minute>` + `EXPIRE 60` | **滑动窗口**（ZSet 存时间戳）+ **用户名 / IP 双维度** | 滑动窗口没有固定窗口的**临界问题**；且要同时按 IP 和用户名两个维度限 |
+| **B 日记防重** | `SET NX` 幂等键 = `userId + 内容摘要` | `SET NX`，key = **纯 `userId`**，TTL **15 秒** | 业务假设：**写一篇日记至少要 15 秒**，窗口内二次提交必为异常。不需要内容摘要（见 11.2） |
+
+### 11.2 定下的设计（别再动摇）
+
+| 决策 | 内容 |
+|---|---|
+| **限流算法** | **滑动窗口**（ZSet：member = `时间戳-UUID`，score = 时间戳）。⚠️ member **必须带 UUID** —— 纯时间戳做 member 会在同一毫秒被 ZSet **去重**，导致少算 |
+| **双维度阈值** | 用户名 60 秒 **10** 次 / IP 60 秒 **30** 次（IP 阈值更大：NAT 出口后面可能有很多正常用户） |
+| **超限处罚** | 写黑名单，TTL **3 分钟**（不是永久封） |
+| **黑名单读取时机** | 应**先查黑名单、命中就早退** —— 否则被封的 IP 继续打，会一直白写 ZSet |
+| **Redis 挂掉** | `times` 保持 `null` → 判断短路 → **放行**（fail-open）。登录接口可接受，但要记住「**Redis 一挂，DoS 防御归零**」 |
+| **成功登录** | 只清**用户名**计数，**不清 IP** 计数 —— IP 计数代表"该 IP 的总请求量"，不该因一次成功就归零 |
+| **日记防重锁** | 纯 `userId` + 15 秒；**成功后绝不 `delete`** —— 否则"提交成功 → 释放锁 → 再点一次 → 又能提交"，防重直接失效 |
+| **防重 vs 幂等** | **防重锁必须等 TTL 自然过期**，与分布式锁「用完立刻释放」**语义相反** |
+
+### 11.3 踩过的坑（教学价值高）
+
+| # | 坑 | 后果 | 教训 |
+|---|---|---|---|
+| 1 | 🔴 **黑名单「读的 key」少拼后缀** —— 读 `get(LOGIN_IP_BAN)`，写 `LOGIN_IP_BAN + ip` | 读永远 `null` → **封禁形同虚设**（超限还拦得住，但"封 3 分钟"是假的：ZSet 1 分钟过期后立刻放行） | 第 3 关「写读 key 不一致」、第 4 关「少冒号」的**第三次同构复现**。**key 拼接要收敛到常量/工具方法，别手写两遍** |
+| 2 | 🔴 **布尔判断方向写反**（`Boolean.TRUE.equals(locked)` 当成"抢锁失败"用） | 第一次提交被拒，**重复提交反而通过** | 遇到布尔判断，**先写三态真值表再写 if**，别凭直觉。`setIfAbsent` 三态：`true`=抢锁成功(放行) / `false`=重复(拒绝) / `null`=异常(**放行**) |
+| 3 | 🔴 **变量名与值语义相反**：`Boolean passwordMatch = !passwordEncoder.matches(...)`，再 `if(!passwordMatch.equals(TRUE))` | 双重取反 → **密码错的能登录、密码对的被拒**（**认证绕过**） | 名字说"匹配"、值却是"不匹配"，后面判断必反。**变量名必须和值语义一致**，别叠加多个 `!` |
+| 4 | `expire` 被当成"缩短 TTL"用 | `expire` 是**重置**不是缩短；攻击者每 5 秒内提交一次就能**无限续期** → 用户被永久锁死 | 认清 `expire` 的语义；防重锁在 TTL 内**不要做任何操作** |
+| 5 | `Boolean locked = null` + `if(!locked)` | Redis 挂 → `null` 自动拆箱 → **NPE 500** | 用 `Boolean.FALSE.equals(x)`（常量在前，天然免疫 NPE） |
+
+> 坑 1/2/3 都是**同一类**：**"成功"和"失败"两个分支被搞混**。写完布尔判断，用真值表过一遍，成本 30 秒，能省 3 小时。
+
+### 11.4 ⚠️ 待办（接手先看这里）
+
+> 状态核对：**2026-10-15 15:30**。**两个编译错误已清**（`UserService` 的 `sw.prettyPrint()` 已删、`common/BCryptExecute.java` 已整体删除 —— 异步化方案放弃）。
+
+| 优先级 | 事项 | 位置 |
+|---|---|---|
+| 🟡 | **`expire` 段建议整段删掉**（`try-catch` 整段）—— `expire` 是**续期**不是缩短，与"防续期"的意图相反；被脚本反复触发会把锁无限续期。重复提交时什么都不做、直接 `throw` 即可 | `DiaryService:85-89` |
+| 🟡 | **`getClientIp()` 只取 `getRemoteAddr()`** —— **本地无 Nginx 时这是对的、不用改**；**部署到有反代的服务器之前必修**。正确顺序：**`X-Real-IP` 优先**（Nginx 用 `$remote_addr` **覆盖**写入，伪造不了）→ 再 `X-Forwarded-For`（**取最后一个**，因为 `$proxy_add_x_forwarded_for` 是**追加**语义，第一个可能是客户端伪造的）→ 最后 `getRemoteAddr()` 兜底。⚠️ **IP 不可信时不要拿它当限流键** —— 会退化成"所有人共用 127.0.0.1 → 一起被封"，比不限流更糟 | `UserService:193` |
+| 🟡 | **黑名单命中应早退** —— 命中后不要再走 `zadd` / `zCard`（被封的 IP 继续打会白写 Redis） | `UserService.checkIpLimit` |
+| ⏭️ | **`@RateLimit` 注解 + 切面 —— 已决定推迟，不是漏做**。做完第 7 关后统一做「手写流 → 注解流」改造，见 **11.6** | 新增 |
+| 🟢 | `IP_LIMIT_KEY` 定义了没用（要么用要么删）；`log.info("日记重复提交")` 建议降 `debug` | `DiaryService:40` / `:84` |
+
+> ⚠️ **做拦截器时的大坑**：**不要复用 `JwtAuthticationFilter.shouldNotFilter()`**（它基于 `SecurityConfig.isPublicPATH()` 跳过公开路径），因为 `/api/user/login`、`/api/user/add` **正好在白名单里** —— 复用会导致**最该限流的登录接口反而不限流**。
+
+### 11.5 性能排查结论（别再去优化 BCrypt）
+
+用 `StopWatch` 分段打点实测：**第一次请求 DB 与 BCrypt 各占一半；第二次之后大头基本是 BCrypt**。
+
+- **DB 那半是冷启动**（HikariCP 建连 + MyBatis 初始化 + JIT），稳定后 DB 不是瓶颈 → **不用再查 DB**
+- **BCrypt 100ms 是设计代价，不是 bug**：strength=10 → 2¹⁰ 轮迭代。**不要为了"看起来快"降 strength**（安全性等比例下降）
+- **被拉黑时 7ms** = 早退跳过了 DB + BCrypt → 反过来印证 BCrypt 就是大头
+- **真正的风险不是"慢"，是"堵"**：BCrypt 是 **CPU 密集**操作，会**占住 Tomcat 工作线程**；高并发下 200 个线程全被占满 → **连首页、文章列表这些不需要 BCrypt 的接口也一起卡死**
+- **所以第 5 关限流的真正价值**：BCrypt 慢意味着攻击者**成本极低**就能让服务器 CPU 满载（每个登录请求强制一次 100ms 计算）→ **限流是保护这个 CPU 黑洞的唯一防线**
+- 若真要优化：**BCrypt 异步化**（丢到独立线程池，线程数 ≈ **核数 + 1**，Tomcat 线程立刻释放）。⚠️ 异步线程里 `RequestContextHolder` **拿不到 request** —— 必须提前把 IP 等纯数据取出来再传进去
+- 其他低成本项：`WHERE username = ? OR email = ?` 用 `EXPLAIN` 看是否全表扫描（OR 条件难走索引）；前端做 token 续期，减少登录接口调用频次
 
 **概念归档**
 

@@ -1,4 +1,4 @@
-package org.example.aispringboot.config;
+package org.example.aispringboot.config.redisconfig;
 
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
