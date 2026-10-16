@@ -99,13 +99,21 @@ public class AnalyticsService {
             List<EmotionDiary> dayDiaries = diariesByDate.getOrDefault(d, List.of());
             List<ConsultationSession> daySessions = sessionsByDate.getOrDefault(d, List.of());
 
-            Set<Long> diaryUserIds = dayDiaries.stream()
-                    .map(EmotionDiary::getUserId).collect(Collectors.toSet());
-            Set<Long> consultationUserIds = daySessions.stream()
-                    .map(ConsultationSession::getUserId).collect(Collectors.toSet());
-            Set<Long> dayActiveUserIds = new HashSet<>();
-            dayActiveUserIds.addAll(diaryUserIds);
-            dayActiveUserIds.addAll(consultationUserIds);
+            Set<Long> diaryUserIds = null;
+            Set<Long> consultationUserIds = null;
+            Set<Long> dayActiveUserIds = null;
+            try {
+
+            } catch (Exception e) {
+                log.warn("补齐日期-redis出错，转用读库");
+                diaryUserIds = dayDiaries.stream()
+                        .map(EmotionDiary::getUserId).collect(Collectors.toSet());
+                consultationUserIds = daySessions.stream()
+                        .map(ConsultationSession::getUserId).collect(Collectors.toSet());
+                dayActiveUserIds = new HashSet<>();
+                dayActiveUserIds.addAll(diaryUserIds);
+                dayActiveUserIds.addAll(consultationUserIds);
+            }
 
             emotionTrend.add(AnalyticsConvert.toEmotionTrendItem(d, dayDiaries));
             dailyTrend.add(AnalyticsConvert.toDailyTrendItem(d, daySessions));

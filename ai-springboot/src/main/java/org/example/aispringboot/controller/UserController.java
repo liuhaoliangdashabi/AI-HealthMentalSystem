@@ -13,6 +13,7 @@ import org.example.aispringboot.DTO.response.UserLoginResponseDTO;
 import org.example.aispringboot.common.Result;
 import org.example.aispringboot.exception.BusinessException;
 import org.example.aispringboot.service.DiaryService;
+import org.example.aispringboot.service.SignService;
 import org.example.aispringboot.service.UserService;
 import org.example.aispringboot.util.JwtTokenUtil;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,6 +22,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -34,8 +36,8 @@ public class UserController {
     private DiaryService diaryService;
     @Resource
     private JwtTokenUtil jwtTokenUtil;
-
-
+    @Autowired
+    private SignService signService;
 
     @PostMapping("/user/login")
     public Result<UserLoginResponseDTO> login(@Valid @RequestBody UserLoginCommandDTO commandDTO,
@@ -74,6 +76,18 @@ public class UserController {
         log.debug("Id={}提交情绪日记",user.getId());
         diaryService.addEmotionDiary(commandDTO,user.getId());
         return Result.success();
+    }
+
+    @PostMapping("/user/sign")
+    public Result<Boolean> sign(@AuthenticationPrincipal UserLoginResponseDTO.UserDetailResponseDTO user){
+        log.debug("Id={}签到",user.getId());
+        return Result.success(signService.sign(user.getId()));
+    }
+
+    @GetMapping("/user/sign/status")
+    public Result<Map<String,Object>> getSignStatus(@AuthenticationPrincipal UserLoginResponseDTO.UserDetailResponseDTO user){
+        log.debug("Id={}查询近期签到状态",user.getId());
+        return Result.success(signService.getSignStatus(user.getId()));
     }
 
 }
