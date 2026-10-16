@@ -22,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.time.Duration;
+import java.time.LocalDate;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -37,7 +38,7 @@ public class DiaryService {
     private StringRedisTemplate redis;
 
     private static final String DIARY_DUP_LOCK="diary:dup:";
-    private static final String IP_LIMIT_KEY="rl:ip:";
+    private static final String UV_KEY="uv:";
 
     public IPage<DiaryResponseDTO> getEmotionalPage(DiaryPageQueryDTO query) {
         Page<EmotionDiary> page=new Page<>(query.getCurrent(),query.getSize());
@@ -87,5 +88,11 @@ public class DiaryService {
         EmotionDiary diary=DiaryConvert.commandToEntity(commandDTO,userId);
         emotionDiaryMapper.insert(diary);
         log.info("用户{}提交情绪日记成功，diaryId={},日期={}",userId,diary.getId(),diary.getDiaryDate());
+        try{
+            redis.opsForHyperLogLog().add(UV_KEY+diary.getDiaryDate()+ LocalDate.now(),String.valueOf(userId));
+            redis.expire(UV_KEY,Duration.ofDays(30));
+        }catch(Exception e){
+            log.warn("userId={}的uv记录失败，快去修复",userId,e);
+        }
     }
 }

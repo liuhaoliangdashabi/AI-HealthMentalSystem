@@ -164,4 +164,11 @@ public class KnowledgeController {
         log.debug("Id={}查询数据分析总览",user.getId());
         return Result.success(analyticsService.getOverview());
     }
+
+    @GetMapping("/data-analytics/uv-trend")
+    public Result<List<AnalyticsOverviewResponseDTO.UserActivityItem>> uvTrend(
+            @AuthenticationPrincipal UserLoginResponseDTO.UserDetailResponseDTO user){
+        log.debug("Id={}查询UV趋势",user.getId());
+        return Result.success(analyticsService.getUVTrend());
+    }
 }
