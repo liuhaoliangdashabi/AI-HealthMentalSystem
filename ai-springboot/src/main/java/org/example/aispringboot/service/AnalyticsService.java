@@ -45,6 +45,8 @@ public class AnalyticsService {
     private StringRedisTemplate redis;
 
     private static final String UV_KEY="uv:";
+    //这天查过库，结果就是0
+    private static final String UV_EMPTY_KEY="uv:empty:";
     private static final Duration UV_TTL=Duration.ofDays(40);
 
     public AnalyticsOverviewResponseDTO getOverview() {
@@ -139,13 +141,16 @@ public class AnalyticsService {
             Long count=null;
             try{
                 count=redis.opsForHyperLogLog().size(key);
-                if(count==null || count==0L){
+                if (count==null||count==0L) {
+                    boolean hasData=Boolean.TRUE.equals(redis.hasKey(key));
+                    boolean knownEmpty=Boolean.TRUE.equals(redis.hasKey(UV_EMPTY_KEY+day));
                     //可能真没人访问，也可能key不存在
-                    if(!Boolean.TRUE.equals(redis.hasKey(key))){
+                    if(!hasData && !knownEmpty){
                         needDb.add(day);
                         continue;
                     }
                 }
+
             }catch(Exception e){
                 log.warn("Redis读取失败，{}起剩余天数整段回源",day,e);
                 redisDown=true;
@@ -198,13 +203,14 @@ public class AnalyticsService {
 
     private void writeBackToRedis(LocalDate day,Set<Long> userIds){
         try{
-            String key=UV_KEY+day;
             if(userIds.isEmpty()){
-                redis.opsForHyperLogLog().union(key);
-            }else {
-                redis.opsForHyperLogLog().add(key,
-                        userIds.stream().map(String::valueOf).toArray(String[]::new));
+                redis.opsForValue().set(UV_EMPTY_KEY+day,"1",UV_TTL);
+                return;
             }
+            String key=UV_KEY+day;
+            redis.opsForHyperLogLog().add(key,
+                    userIds.stream().map(String::valueOf).toArray(String[]::new));
+
             redis.expire(key,UV_TTL);
         }catch(Exception e){
             log.warn("UV回存失败，date={}",day,e);

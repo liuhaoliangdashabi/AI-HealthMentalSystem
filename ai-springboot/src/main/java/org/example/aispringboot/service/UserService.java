@@ -190,7 +190,11 @@ public class UserService {
     }
 
     private String getClientIp(HttpServletRequest request){
-        return request.getRemoteAddr();
+        String ip=request.getRemoteAddr();
+        if(ip==null)return "unknown";
+        if("0:0:0:0:0:0:0:1".equals(ip)||"::1".equals(ip))return "127.0.0.1";
+        if(ip.startsWith("::ffff:"))return ip.substring(7);
+        return ip;
     }
 
     private void loginBanIP(String ip){

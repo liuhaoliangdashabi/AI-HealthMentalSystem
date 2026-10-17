@@ -45,7 +45,7 @@
 | **第 4 关** | 热门文章排行榜（ZSet） | ✅ **完成**（2026-10-14，收官记录见**第十节**） |
 | **第 5 关** | 限流 + 防重复提交 | ✅ **完成**（2026-10-15，收官记录见**第十一节**）；⏭️ 注解流改造推迟到第 7 关后（见 11.6） |
 | **第 6 关** | 分布式锁 | ✅ **完成**（2026-10-16，收官记录见**第十二节**）；⚠️ TTL 与任务耗时待对齐（见 12.4） |
-| 第 7 关 | 高级数据结构 | 🔧 进行中（2026-10-16 起） |
+| 第 7 关 | 高级数据结构 | 🔧 进行中（2026-10-16 起）；场景 1 BitMap 签到 ✅、**场景 2 HyperLogLog UV ✅（2026-10-17，见第十三节）**、场景 3 Stream 任务队列 ⬜、场景 4 文件秒传 ⬜、场景 5 AI 结果缓存 ⬜ |
 | 第 8 关 | 面试包装 | ⬜ 未开始 |
 
 > 第 1 关的「三大问题」已讨论完，**只有"穿透"落地了**（见 8.4）。
@@ -1456,9 +1456,25 @@ redis-cli TTL article:hot:7d            # 约 90 秒
 |---|---|---|
 | ✅ | ~~`expire` 段~~ **已于 2026-10-15 删掉** —— `expire` 是**续期**不是缩短，与"防续期"意图相反；被脚本反复触发会把锁无限续期。重复提交时什么都不做、直接 `throw` 即可（锁的 TTL 来自 `setIfAbsent` 的第三个参数，不受影响） | `DiaryService` ✅ |
 | 📌 | **`getClientIp()` 只取 `getRemoteAddr()`** —— **本地无 Nginx 时这是对的、不用改**；**部署到有反代的服务器之前必修**。正确顺序：**`X-Real-IP` 优先**（Nginx 用 `$remote_addr` **覆盖**写入，伪造不了）→ 再 `X-Forwarded-For`（**取最后一个**，因为 `$proxy_add_x_forwarded_for` 是**追加**语义，第一个可能是客户端伪造的）→ 最后 `getRemoteAddr()` 兜底。⚠️ **IP 不可信时不要拿它当限流键** —— 会退化成"所有人共用 127.0.0.1 → 一起被封"，比不限流更糟 | `UserService:193` |
+| 🟡 | **本地会拿到 IPv6 回环 `0:0:0:0:0:0:0:1`**（2026-10-17 实测 `login:try:ip:0:0:0:0:0:0:0:1`）—— `localhost` 优先解析成 `::1`，所以 `getRemoteAddr()` 返回 IPv6 形式。**同一个客户端可能一会是 `127.0.0.1`、一会是 `::1` → 两套独立计数器 → 限流被稀释一半**（key 里带冒号本身合法，Redis key 是二进制安全的，不影响功能）。归一化写法见下 | `UserService:193` |
+
+```java
+private String getClientIp(HttpServletRequest request){
+    String ip=request.getRemoteAddr();
+    if(ip==null) return "unknown";
+    // IPv6 回环 → 统一成 IPv4 回环，否则同一台机器两套计数器
+    if("0:0:0:0:0:0:0:1".equals(ip)||"::1".equals(ip)) return "127.0.0.1";
+    // IPv4-mapped IPv6（::ffff:192.168.1.5）→ 剥掉前缀
+    if(ip.startsWith("::ffff:")) return ip.substring(7);
+    return ip;
+}
+```
+
+> 判断"是不是 IPv6"只需 `ip.contains(":")`（IPv4 地址里不可能有冒号）。**不要**用 `InetAddress.getByName(ip).getHostAddress()` 去"归一化" —— 它会把 `127.0.0.1` 也变成 `0:0:0:0:0:0:0:1`，方向反了。
 | 🟡 | **黑名单命中应早退** —— 命中后不要再走 `zadd` / `zCard`（被封的 IP 继续打会白写 Redis） | `UserService.checkIpLimit` |
 | ⏭️ | **`@RateLimit` 注解 + 切面 —— 已决定推迟，不是漏做**。做完第 7 关后统一做「手写流 → 注解流」改造，见 **11.6** | 新增 |
 | 🟢 | `IP_LIMIT_KEY` 定义了没用（要么用要么删）；`log.info("日记重复提交")` 建议降 `debug` | `DiaryService:40` / `:84` |
+| 🟡 | **`diary:dup:<userId>` 15 秒锁的语义是混的**（2026-10-17 用户报"日记只能写一篇"）。它既不是**防重复提交**（真正的防重复要看**内容** —— 双击、网络重试送来的是同一份内容），也不是**"一天一篇"的业务规则**（那该用 DB 唯一索引 `(user_id, diary_date)`）。当前实现是**按 userId 的粗暴限流**：15 秒内同一用户写不了第二篇，**"补记昨天 + 今天"会被误伤**。三条路：① 缩短到 3 秒（只防双击，最省事）② 换成内容指纹 `MD5(userId+diaryDate+content)`、TTL 60 秒（真正的防重复）③ 若业务就是"一天一篇"→ DB 加唯一索引，Redis 锁可直接删。**✅ 2026-10-17 用户已采用 ②**：`DiaryService:85-88` 先算 `fp=md5(userId|diaryDate|diaryContent)`，锁 key 变成 `diary:dup:<fp>`、TTL 60 秒，insert 失败时 `releaseDupLock` 主动删锁。**遗留**：`:84` 注释还写着"5s"，实际是 60s | `DiaryService:81` |
 
 > ⚠️ **做拦截器时的大坑**：**不要复用 `JwtAuthticationFilter.shouldNotFilter()`**（它基于 `SecurityConfig.isPublicPATH()` 跳过公开路径），因为 `/api/user/login`、`/api/user/add` **正好在白名单里** —— 复用会导致**最该限流的登录接口反而不限流**。
 
@@ -1623,4 +1639,244 @@ redis-cli TTL article:hot:7d            # 约 90 秒
 
 ---
 
-*本文档最后更新：2026-10-16。换电脑后：装 Redis（下 Release 不是 Source）→ 拉 `AI-mentalHealthSystem` → 读本文档第 0 节继续。*
+## 十三、第 7 关场景 2：HyperLogLog UV（2026-10-17）✅
+
+### 13.1 写到哪了
+
+| 文件 | 状态 |
+|---|---|
+| `DiaryService.addEmotionDiary` 里 `PFADD uv:<diaryDate> <userId>` + `EXPIRE 40天` | ✅ 已修（key 只拼一次，`add`/`expire` 共用） |
+| `ConsultationSessionsService.createSession` 里 `PFADD uv:<startedAt.toLocalDate()>` + `EXPIRE 40天` | ✅ 已补（2026-10-17，UV 写侧口径与回源对齐） |
+| `AnalyticsService.getUVTrend()` `:133-182` | ✅ 已写（逐天读 → 缺失记账 → 查库 + 回存 → 组装） |
+| `AnalyticsService.queryUvDetailFromDb()` `:184-200` | ✅ 已写（一次范围查 + `computeIfAbsent` 分组） |
+| `AnalyticsService.writeBackToRedis()` `:202-216` | ✅ 已修（空集合写墓碑 `uv:empty:<date>`） |
+| `KnowledgeController` 的 `GET /data-analytics/uv-trend` | ✅ 已挂（`/api/data-analytics/uv-trend`，`:168`） |
+| **验收** | ✅ **降级链路已跑通**（停 Redis / key 缺失 → `code:200`，数字来自 DB）；✅ **墓碑已实测生效**（见下） |
+
+**墓碑实测证据（2026-10-17）**：
+```
+redis-cli --scan --pattern "uv:*"     → 6 个 HLL（09-29/09-30/10-01/10-05/10-06/10-16）+ 24 个墓碑，30 天全覆盖
+redis-cli TTL uv:empty:2026-10-17     → 3455898（≈40 天，TTL 生效）
+redis-cli PFCOUNT uv:2026-10-16       → 2（与接口返回的 activeUsers: 2 一致）
+```
+> ⚠️ 上面那批数字是**回源**写进去的（`writeBackToRedis`），不是实时写入。写侧 key 拼错的问题已在 2026-10-17 修掉，之后的新数据才走实时写入。
+> **验收要重做一次**：`redis-cli DEL uv:<今天>` → 调一次接口 → 数字应来自回源；再写一篇日记 → `PFCOUNT` 应 +1。
+
+---
+
+### 13.2 ⭐ 心智模型：这玩意儿就是 **Cache Aside（旁路缓存）**
+
+**一句话**：**读缓存 → 没有就查库 → 查完顺手把缓存补上。**
+
+拆成三条路径，就这三条，没有第四条：
+
+| 路径 | 触发条件 | 做什么 | 能不能补缓存 |
+|---|---|---|---|
+| **① 正常** | Redis 有值 | 直接用，不碰 DB | —— |
+| **② 个别天缺** | `EXISTS = 0` | 只查那几天 | ✅ **能补**（Redis 是好的） |
+| **③ 整段挂** | 抛异常 | 剩余天数全查库 | ❌ **补不了**（Redis 不可用） |
+
+代码里的三个变量正好对应这三条：
+- `uvByDay` → 结果容器（30 天，最后统一组装）
+- `needDb` → "**需要查库的天**"的记账本（②③ 都往这里记）
+- `redisDown` → 标记"是③不是②"，**因为③回存也没用，别白试 30 次**
+
+> **为什么"回存失败"不算 bug**：回存只是**优化**，不是必须完成的动作。它有一个**免费的重试机制** —— 下次请求会再补一次。所以 `writeBackToRedis` 里 catch 住只 warn（fail-open）。
+> **对比**：`FileCompensator` 删 OSS 失败必须异步重试 3 次，因为**没有免费重试**（删完就没人再管了，文件会一直占存储费）。**判据：这个动作有没有"下一次"**。
+
+---
+
+### 13.3 为什么要 `EXISTS` —— `0` 的二义性
+
+这是整段逻辑最绕的地方，但只绕在一个点上：
+
+> **`PFCOUNT` 返回 `0` 的时候，你无法区分两件事。**
+
+| `PFCOUNT` | `EXISTS` | 含义 | 该不该查库 |
+|---|---|---|---|
+| `> 0` | —— | 有数据 | ❌ 不用 |
+| `0` | **`1`** | 那天**真没人**访问 | ❌ **不用**（`0` 就是正确答案） |
+| `0` | **`0`** | key **丢了**（被清 / 误删） | ✅ **要查** |
+| 抛异常 | —— | Redis 挂了 | ✅ 要查（整段） |
+
+**所以 `EXISTS` 的唯一作用就是"区分器"**：把"真没人"和"数据丢了"分开。
+
+> ⚠️ **陷阱**：如果你图省事，把判据写成"`count == 0` 就查库"，那么**所有没人访问的天都会被查库** —— 而你项目里 30 天有 **23 天是空的**，等于**每次请求都查库，缓存彻底失效**。
+> ⚠️ **另一个陷阱**：`PFCOUNT` 在 key 不存在时返回 **`0` 而不是 `null`**。**回源的判据永远是"抛异常"或"`EXISTS = 0`"，不是"值是 0"**。
+
+---
+
+### 13.4 🔴 "空的天"最阴 —— 两道门都堵死了
+
+**问题**：某天 DB 里也没数据（比如 09-22）→ 查库拿到**空集合** → 我们想"建一个**基数 0 的空 HLL** 表示这天是 0" → **建不出来** → 这个 key 永远不存在 → 下次又被判成"②缺失" → **每次都白查库**。
+
+**为什么建不出来？两道校验，一道都绕不过**（已实测 + 读源码确认）：
+
+| 尝试 | 卡在哪 | 证据 |
+|---|---|---|
+| `opsForHyperLogLog().add(key, new String[0])` | **Spring 连接层** | `LettuceHyperLogLogCommands:39` `Assert.notEmpty(values, "PFADD requires at least one non 'null' value.")` |
+| `RedisCallback` 里 `conn.pfAdd(key.getBytes(), new byte[0][])` | **同上，是同一个方法** | 绕不过 |
+| `opsForHyperLogLog().union(key)`（无源 `PFMERGE`） | **Lettuce 层** | `RedisCommandBuilder:2296` `LettuceAssert.notEmpty(sourcekeys, "Sourcekeys must not be empty")` |
+
+**但 Redis 原生是支持的**（`redis-cli` 实测）：
+```
+PFADD   wb_probe_hll   → 1    ; PFCOUNT → 0 ; EXISTS → 1   ✅ key 建出来了
+PFMERGE wb_probe2      → OK   ; PFCOUNT → 0 ; EXISTS → 1   ✅ key 建出来了
+```
+
+> **教训**：Spring Data Redis 是 **"Spring 层 + Lettuce 层"两道门**。判断"某个 API 能不能这么用"必须**两层都查**，只查一层会得出错误结论。
+> **查证方法**：`.m2` 里有 `spring-data-redis-3.5.12-sources.jar` 和 `lettuce-core-6.6.0.RELEASE-sources.jar`，解压后 `grep -rn "关键字"` 就能看到真实的 `Assert` 位置。
+> **最省事的判断顺序**：① `redis-cli` 测 Redis 原生行为 → ② 查 Spring 源码 → ③ 查 Lettuce 源码。
+
+---
+
+### 13.5 ✅ 改法：墓碑 key（"缓存空对象"）
+
+既然造不出"空 HLL"，就**换一种方式记住"这天查过了，确实是 0"**：
+
+```java
+private static final String UV_EMPTY_KEY = "uv:empty:";   // 墓碑：标记"这天查过库，结果是 0"
+
+// ① writeBackToRedis —— 空集合时写墓碑，不写 HLL
+private void writeBackToRedis(LocalDate day, Set<Long> userIds){
+    try{
+        if(userIds.isEmpty()){
+            // 空集合不能 PFADD（Spring 拦）、也不能无源 PFMERGE（Lettuce 拦）
+            // → 用 String 类型的墓碑 key 代替"空 HLL"
+            redis.opsForValue().set(UV_EMPTY_KEY + day, "1", UV_TTL);
+            return;
+        }
+        String key = UV_KEY + day;                 // ← 只拼一次，expire 复用同一个变量
+        redis.opsForHyperLogLog().add(key,
+                userIds.stream().map(String::valueOf).toArray(String[]::new));
+        redis.expire(key, UV_TTL);
+    }catch(Exception e){
+        log.warn("UV回存失败，date={}", day, e);    // fail-open
+    }
+}
+
+// ② 读取侧判据 —— "两个都没有"才算缺失
+Long count = redis.opsForHyperLogLog().size(key);
+if (count == null || count == 0L) {
+    boolean hasData    = Boolean.TRUE.equals(redis.hasKey(key));
+    boolean knownEmpty = Boolean.TRUE.equals(redis.hasKey(UV_EMPTY_KEY + day));
+    if (!hasData && !knownEmpty) {                 // ← 既没数据、又没查过 → 真缺失
+        needDb.add(day);
+        continue;
+    }
+}
+```
+
+**为什么推荐这个而不是"干脆跳过空天"**：跳过的话空天的 key 永远不存在 → 每次请求都查库 → **缓存等于没做**（你 30 天里 23 天空）。
+
+**为什么这个方案好**：它就是缓存系统的标准模式 —— **"缓存空对象"（cache null），防缓存穿透的经典手段之一**，面试可以直接讲；而且**不依赖任何实现细节**（不像 `union` 那样依赖"某个方法碰巧没加校验"）。
+
+---
+
+### 13.6 📌 待办（2026-10-17 17:50 更新）
+
+> **场景 2 已于 2026-10-17 收尾。** 原来 8 条待办修完 8 条，剩下的是"优化项"不是"bug"。
+
+**✅ 已修完（别再翻旧账）**
+
+| # | 原问题 | 现状 |
+|---|---|---|
+| 1 | `DiaryService` 日期拼两遍 → key `uv:2026-10-172026-10-17` | ✅ 改 `String key=UV_KEY+diary.getDiaryDate()`，`add`/`expire` 共用 |
+| 2 | `expire(UV_KEY, ...)` 少日期 → `TTL=-1` 永久堆积 | ✅ 改 `expire(key, ...)` |
+| 3 | `if(redis.expire(...))` 拆箱 + 条件反了 | ✅ `!Boolean.TRUE.equals(redis.expire(key,UV_TTL))` |
+| 4 | `hasKey` 无条件算 → 30 天 90 次往返 | ✅ 收回 `if(count==null\|\|count==0L)` 里面 |
+| 5 | `UV_TTL` 写侧 30 天 / 读侧 40 天 | ✅ 统一 40 天 |
+| 6 | `ConsultationSessionsService` 无 `PFADD` → UV 口径打架 | ✅ `insert` 后补 `PFADD uv:<startedAt.toLocalDate()>` + `EXPIRE 40天` |
+| 7 | `GlobalExceptionHandler` 把所有唯一键冲突报成"用户名/邮箱已注册" | ✅ 按 `e.getMessage()` 表名分派 |
+| 8 | 日记防重复语义混（15 秒 userId 锁） | ✅ 改内容指纹 `md5(userId\|diaryDate\|content)` + 60 秒；前置判重放抢锁前；失败主动释放锁 |
+
+**🟡 还剩（优化项，不阻塞第 7 关收尾）**
+
+| # | 事项 | 位置 |
+|---|---|---|
+| 1 | **key 拼接收敛** —— `uv:` 现在在 **3 个文件**里各拼一遍（`DiaryService` / `AnalyticsService` / `ConsultationSessionsService`），`expire` 又各拼一遍。这是翻车四次的根因。收敛到 `util/RedisKeys.uv(LocalDate)` + 共用 `UV_TTL` | 三处 |
+| 2 | `UserActivityItem` 复用 → `getUVTrend` 只填 2 个字段，另 3 个恒 `null`。新建 `UvTrendItem {date, activeUsers}` | `AnalyticsService` + `KnowledgeController:168` |
+| 3 | `DiaryService` 的 `//写一篇日记5s` 注释，实际是 60 秒 | `DiaryService` |
+| 4 | `DiaryPageQueryDTO.setSize` 没上限 → `size=100000` 一次拉全表 | `DiaryPageQueryDTO` |
+| 5 | IDOR：`/emotion-diary/admin/page` 的 `userId` 来自前端 query 且无校验 | `KnowledgeController:129` |
+
+**📅 已登记、暂缓**
+- 前端「回显我的日记」（用**页签**不用按钮）+ 后端 `GET /emotion-diary/mine` 强制覆盖 `userId` → 与用户日历模块同一批做
+
+**📖 两条别忘的原理（原 13.6 #1 的内容，压缩保留）**
+
+1. **日期后缀绝对不能删** —— 它的作用不是"防止天数不对"，而是**按天分桶的唯一手段**。HLL 是"一个 key = 一个集合"，删掉后缀 → 30 天全挤进 `uv:` 一个 HLL → `PFCOUNT` 出来的是**累计去重人数**（只增不减），曲线变成单调上升的线。**要改的只是"日期取谁"，不是"要不要日期"。**
+2. **写侧和读侧必须用同一个"日期定义"** —— 读侧 `queryUvDetailFromDb` 按 `diary_date` / `startedAt.toLocalDate()` 归桶，写侧就必须也按它，不能用 `LocalDate.now()`。
+
+**🔵 已验证 OK**
+- `AnalyticsService` 的 `.lt(max.plusDays(1).atStartOfDay())` —— 半开区间正确（原先误写 `le`，会把第二天整点创建的会话多算进来）
+- `writeBackToRedis` 的 `key` 只拼一次、`add` 与 `expire` 复用同一变量 —— 结构上消灭了"拼接不一致"
+- `getUVTrend` 的 `catch` 只认异常、`EXISTS` 只认缺失 —— **两者不混用**，方向正确
+- 墓碑实测：6 个 HLL + 24 个墓碑覆盖 30 天，`TTL uv:empty:<date>` ≈ 40 天
+
+---
+
+### 13.7 概念归档
+
+- **`count == null` 几乎恒为假**：`opsForHyperLogLog().size()` 来自 `PFCOUNT` 的整数回复，**实际不会返回 null**（只有 pipeline 里才可能）。`count == null` 是防御性写法，真正生效的是 `count == 0L`
+- **`catch (Exception e)` 的代价**：它会把**自己代码的 bug** 误判成**"Redis 挂了"**（本项目已踩过：`uvByDay` 未初始化 → NPE 在 try 里 → 被 catch 吞掉 → 日志打"Redis读取失败"，误导排查方向）。
+  **对策：`try` 块里只放"会因为 Redis 而失败"的语句，自己的业务逻辑放外面**
+- **Helpful NullPointerException（JDK 14+，JEP 358）**：`Cannot invoke "java.util.Map.put(Object, Object)" because "uvByDay" is null` 这种措辞是 JVM 自动补的，**不是反射报错**，只是用了 `类名.方法名` 的全限定写法
+- **`computeIfAbsent(key, k -> new HashSet<>())`** = 没有就造一个放进去并返回它。**别用 `getOrDefault(key, new HashSet<>())`** —— 它返回的临时 Set **没有放回 map**，`add` 进去就**静默丢失**
+- **HLL 能不能"从 DB 重建"**：**能**。`DEL key` + 重新 `PFADD` 全部元素即可（没有"设置基数"的操作，但可以把元素重新喂一遍）。前提是**元素在 DB 里有明细** —— 本项目 `uv:` 装的是 userId，`emotion_diary` + `consultation_session` 有明细 → **可精确重建**。"回存"就是重建
+- **`PFADD` 返回 `1/0` 不能判断"元素是否新增"**，只表示"基数估计是否可能变了"
+- **12KB 是 HLL 的【上限】不是恒定值**：有 `sparse`/`raw` 两种编码，`OBJECT ENCODING` 可看，阈值 `hll-sparse-max-bytes` 默认 3000
+- ⭐ **缓存不能用来做"写路径的准入判断"**（2026-10-17 用户问"判重为什么要查库，我想缓存全覆盖"）
+  - **判重 / 库存 / 余额 / 唯一性** 要的是**绝对真相**；缓存只能给"大概率对"
+  - **缓存里没有 ≠ 没写过** —— 写日记时并没有同步维护这份缓存 → 一旦 miss 就**误判放行** → 还是撞 DB 唯一索引 → 又回到那个错乱提示
+  - **读路径可以容忍 1% 的旧数据，写路径不能容忍 1% 的错误放行**
+  - 一句话：**缓存是"加速读"，不是"替代真相"**
+  - 这次 `selectCount` 也不贵：`UNIQUE(user_id, diary_date)` 走索引、等值查找 O(log n)，而且**写日记是全站最低频的写操作**（一天一篇，第二篇就被拦），不是 N+1
+  - 真想省这一次查询，正确做法是**删掉前置判重、只留 `GlobalExceptionHandler` 按表名分派**（正常路径 0 次查询，重复路径才走一次异常）——**这是取舍，不是"加缓存"**
+- **`UNIQUE(user_id, diary_date)` 是建表时就有的业务规则**，不是后来加的（`EmotionDiary:33` 注释写明）。用户"以前以为能写多篇"，只是因为**没撞过**（每天只写一篇）。现在的"一天一篇"提示不是新限制，是把已有的 DB 约束**翻译成人话**
+
+---
+
+### 13.8 📄 一页复盘（第 8 关面试包装直接抄这里）
+
+**一句话**：把「每日独立访客数」从「全量拉表到内存去重」换成「Redis HyperLogLog 估算 + 缓存缺失时回源 DB」，**误差 0.81%，内存从几百 MB 降到 360KB**。
+
+**数据流（四件事）**
+
+| 环节 | 方法 | 干什么 |
+|---|---|---|
+| 写 | `DiaryService` 里 `PFADD uv:<date> <userId>` + `EXPIRE 40天` | 记一笔"这天谁来过" |
+| 读 | `AnalyticsService.getUVTrend()` | 30 天逐天 `PFCOUNT`，缺失的记账 |
+| 回源 | `queryUvDetailFromDb(List<LocalDate>)` | 一次范围查（2 条 SQL）+ `computeIfAbsent` 按天分组 |
+| 回存 | `writeBackToRedis(day, userIds)` | 有人 → `PFADD`；没人 → **墓碑** `uv:empty:<day>` |
+
+**碰到的 10 个坑（按发生顺序）**
+
+| # | 坑 | 根因 | 怎么改 |
+|---|---|---|---|
+| 1 | `uvByDay` 是 `null` → NPE，日志却报"Redis 读取失败" | `catch(Exception)` 把自己的 bug 当成 Redis 故障 | 初始化 `new LinkedHashMap<>()`；**`put` 移出 `try`** |
+| 2 | 咨询会话时间区间多算第二天整点 | 半开区间写成了闭区间 `le` | 改 `lt`（`[min 00:00, max+1 00:00)`） |
+| 3 | 空集合 `PFADD` 报 `requires at least one non 'null' value` | **Spring** `LettuceHyperLogLogCommands:39` `Assert.notEmpty` | 换思路 |
+| 4 | 改用无源 `PFMERGE`（`union(key)`）还是报错 | **Lettuce** `RedisCommandBuilder:2296` `LettuceAssert.notEmpty(sourcekeys)` | 确认"造不出空 HLL"，改用墓碑 |
+| 5 | 空天的 key 永远建不出来 → 每次请求都查库 | 见 3、4，两道门都堵死 | **墓碑 key `uv:empty:<day>`**（缓存空对象） |
+| 6 | `TTL uv:2026-10-17` = `-1`（永不过期） | `expire(UV_KEY, ...)` 少了日期 → 作用在不存在的 key 上 → 返回 `false` 不抛异常 | key 只拼一次，`add` 和 `expire` 共用同一个变量 |
+| 7 | `if(redis.expire(...))` IDE 报拆箱 NPE | `expire` 返回 `Boolean`，`if` 要 `boolean` | `Boolean.FALSE.equals(...)`（**且原条件反了**） |
+| 8 | 30 天打了 90 次 Redis 往返 | `hasKey` 写在 `if` 外面，有数据的天也问 `EXISTS` | 收回 `if(count==null\|\|count==0L)` 里面 |
+| 9 | 写侧记进"今天"、回源归到"昨天" → 数字跳 | 写侧 `LocalDate.now()`，读侧按 `diary_date` | **写读同口径**，统一用 `diary.getDiaryDate()` |
+| 10 | key 变成 `uv:2026-10-172026-10-17` | 把"换成"做成了"追加" | 三行、`String key=...` 只拼一次 |
+
+**三个最值得讲的认知**
+
+1. **`0` 是二义的** —— `PFCOUNT` 返回 `0` 可能是"真没人"也可能是"key 丢了"，必须再问一次 `EXISTS` 才能区分。判据：**回源看"抛异常"或"`EXISTS=0`"，永远不看"值是 0"**
+2. **造不出"空 HLL"** —— Redis 原生支持 `PFADD` 空参 / 无源 `PFMERGE`，但 **Spring 和 Lettuce 各加了一道 `notEmpty`**。结论：用**墓碑 key** 记住"这天查过、结果是 0"（缓存空对象的经典套路，防缓存穿透）
+3. **Spring Data Redis 是两层门** —— 判断"某 API 能不能这么用"必须**两层都查**：`spring-data-redis` 的 `*Commands` 是适配层，真正拼命令的是 `lettuce-core` 的 `RedisCommandBuilder`。查证顺序：`redis-cli` 测原生 → Spring 源码 → Lettuce 源码
+
+**顺带修的（不属于场景 2，但同一批）**
+
+- `GlobalExceptionHandler` 把**所有**唯一键冲突都翻译成"该用户名或邮箱已被注册" → 改成按 `e.getMessage()` 里的表名分派
+- 日记防重复：改成**内容指纹** `md5(userId|diaryDate|content)` + 60 秒；前置判重放在抢锁**之前**；`insert` 失败主动释放锁
+- 认知纠正：**缓存不能做"写路径的准入判断"**（见 13.7）
+
+---
+
+*本文档最后更新：2026-10-17。换电脑后：装 Redis（下 Release 不是 Source）→ 拉 `AI-mentalHealthSystem` → 读本文档第 0 节继续。*

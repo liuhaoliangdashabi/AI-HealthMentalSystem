@@ -94,9 +94,19 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(DuplicateKeyException.class)
     public ResponseEntity<Result<?>> handleDuplicateKey(DuplicateKeyException e) {
-        log.warn("唯一索引冲突，data={}", e.getMessage());
-        return json(Result.error(ResultCode.ACCOUNT_SAME.getCode(), "该用户名或邮箱已被注册，请更换后重试", null));
+        String detail=String.valueOf(e.getMessage());
+        log.warn("唯一索引冲突，data={}",detail);
+        if(detail.contains("emotion_diary")||detail.contains("diary_date")){
+            return json(Result.error(ResultCode.PARAM_ERROR.getCode(),
+                    "今天已经写过日记了，一天只能写一篇",null));
+        }
+        if(detail.contains("username")||detail.contains("email")){
+            return json(Result.error(ResultCode.ACCOUNT_SAME.getCode(),
+                    "该用户名或邮箱已被注册，请更换后重试",null));
+        }
+        return json(Result.error(ResultCode.PARAM_ERROR.getCode(),"数据已存在，请勿重复提交",null));
     }
+
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     public ResponseEntity<Result<?>> handleMethodNotSupported(HttpRequestMethodNotSupportedException e){
@@ -208,6 +218,7 @@ public class GlobalExceptionHandler {
         log.error("系统异常：\n{}",briefStackTrace(e));
         return json(Result.error(ResultCode.SYSTEM_ERROR.getCode(), "系统繁忙，请联系管理员", null));
     }
+
 
     //==================================== 堆栈精简 ====================================
     //e.printStackTrace() 动辄几百行，九成是框架内部调用，真正的出错点反而被埋了。
