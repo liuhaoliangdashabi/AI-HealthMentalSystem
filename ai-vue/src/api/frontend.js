@@ -28,6 +28,18 @@ export const addEmotionDiary=(data)=>{
     return service.post('/emotion-diary',data)
 }
 
+export const getMyDiaries=(params)=>{
+    return service.get('/emotion-diary/page',{params})
+}
+
+export const deleteMyDiary=(id)=>{
+    return service.delete(`/emotion-diary/${id}`)
+}
+
+export const updateEmotionDiary=(id,data)=>{
+    return service.put(`/emotion-diary/${id}`,data)
+}
+
 export const getKnowledgeList=(params)=>{
     return service.get('/knowledge/article/page',{params})
 }

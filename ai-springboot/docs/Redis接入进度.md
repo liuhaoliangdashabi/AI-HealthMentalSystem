@@ -45,7 +45,7 @@
 | **第 4 关** | 热门文章排行榜（ZSet） | ✅ **完成**（2026-10-14，收官记录见**第十节**） |
 | **第 5 关** | 限流 + 防重复提交 | ✅ **完成**（2026-10-15，收官记录见**第十一节**）；⏭️ 注解流改造推迟到第 7 关后（见 11.6） |
 | **第 6 关** | 分布式锁 | ✅ **完成**（2026-10-16，收官记录见**第十二节**）；⚠️ TTL 与任务耗时待对齐（见 12.4） |
-| 第 7 关 | 高级数据结构 | 🔧 进行中（2026-10-16 起）；场景 1 BitMap 签到 ✅、**场景 2 HyperLogLog UV ✅（2026-10-17，见第十三节）**、场景 3 Stream 任务队列 ⬜、场景 4 文件秒传 ⬜、场景 5 AI 结果缓存 ⬜ |
+| 第 7 关 | 高级数据结构 | 🔧 进行中（2026-10-16 起）；场景 1 BitMap 签到 ✅、**场景 2 HyperLogLog UV ✅（2026-10-17，见第十三节）**、**场景 4 文件秒传 ✅**、**场景 5 AI 结果缓存 ✅**（后两个见第十四节）、场景 3 Stream 任务队列 ⬜（明天单独打） |
 | 第 8 关 | 面试包装 | ⬜ 未开始 |
 
 > 第 1 关的「三大问题」已讨论完，**只有"穿透"落地了**（见 8.4）。
@@ -1879,4 +1879,210 @@ if (count == null || count == 0L) {
 
 ---
 
-*本文档最后更新：2026-10-17。换电脑后：装 Redis（下 Release 不是 Source）→ 拉 `AI-mentalHealthSystem` → 读本文档第 0 节继续。*
+## 十四、第 7 关场景 4/5 + 日记模块收尾（2026-10-18）✅
+
+### 14.1 本次落地清单
+
+| 组 | 项 | 内容 | 状态 |
+|---|---|---|---|
+| A 还债 | A1 | 新建 `util/RedisKeys.java`（`uv` / `uvEmpty` / `UV_TTL`） | ✅ |
+| | A2 | `UvTrendItem` 瘦身成 `date` / `activeUsers` 两字段 | ✅ |
+| | A3 | 注释 5s→60s | ✅ |
+| | A4 | `DiaryPageQueryDTO.setSize` 封顶 50 | ✅ |
+| | **A5** | **IDOR + 越权删除**（见 14.2） | ✅ |
+| B 遗留 | B1 | `FileCleanupTask.LOCK_TTL` 30 秒 → 15 分钟（见 14.3） | ✅ |
+| 场景 4 | — | 文件秒传（见 14.4） | ✅ |
+| 场景 5 | — | AI 情绪分析结果缓存（见 14.5） | ✅ |
+| 日记模块 | — | `PUT /emotion-diary/{id}` 编辑接口（见 14.6） | ✅ |
+| 前端 | — | 日记页加「写日记 / 我的日记」切换、列表、编辑回填 | ✅ |
+
+### 14.2 🔴 A5：两个越权漏洞
+
+**漏洞 1 — IDOR（水平越权读）**
+
+`GET /emotion-diary/admin/page` 没加权限注解，任何登录用户都能拉全站日记，还能用 `?userId=` 精准查别人。
+
+**漏洞 2 — 越权删除（比 IDOR 严重）**
+
+```java
+// 原来
+diaryService.deleteEmotionDiary(diaryId);   // 只按 id 删，没有任何归属校验
+```
+
+任何登录用户传任意 id 就能删别人的日记，**不可恢复**。
+
+**修法（三层）**
+
+| 层 | 做法 |
+|---|---|
+| 入口 | 管理端两个接口加 `@PreAuthorize("hasRole('2')")` |
+| Service | C 端统一 `eq(EmotionDiary::getUserId, userId)` |
+| 接口拆分 | C 端 `/emotion-diary/page`、`/emotion-diary/{id}`；管理端 `/emotion-diary/admin/*` |
+
+**`hasRole('2')` 的前缀规则**（面试点）：`hasRole` 会自动补 `ROLE_`，实际检查 `ROLE_2`；`hasAuthority('2')` 才是精确匹配。本项目 filter 塞的是 `"ROLE_"+roleType`，正好对上。若 filter 塞裸 `2`，`hasRole` 恒失败。
+
+**删不到时统一说「不存在」** —— 区分「不存在」和「不是你的」等于给攻击者一个 id 枚举接口。
+
+### 14.3 ⚠️ `isAdmin &&` 是开关，`if(!isAdmin)` 才是锁
+
+为了消除 C 端 `user_id=10 AND user_id=10` 的重复条件，把 `:53` 改成：
+
+```java
+qw.eq(isAdmin && query.getUserId()!=null, EmotionDiary::getUserId, query.getUserId())
+```
+
+**这一步是对的，但它只是「给管理端开窗」**。C 端的安全完全依赖下面这段：
+
+```java
+if(!isAdmin){
+    qw.eq(EmotionDiary::getUserId, userId);   // C 端唯一约束
+}
+```
+
+改的时候这段被一起删掉了 → C 端 `isAdmin=false` 时上面短路、下面没有 → **WHERE 里没有任何 user_id 条件 → 查出全量 18 条**。
+
+| | `isAdmin &&` | `if(!isAdmin)` | 结果 |
+|---|---|---|---|
+| 管理端 | 生效，可按 userId 筛选 | 跳过 | 传了就过滤，不传全量 |
+| C 端（正常） | 短路 | **执行** | `user_id=10` |
+| C 端（删了锁） | 短路 | **没有** | **全量** |
+
+**教训**：一个 `boolean` 参数控制两条分支时，两条分支必须**成对存在**。开关只决定「要不要用前端的值」，锁才决定「你能看到谁」。
+
+### 14.4 场景 4：文件秒传
+
+**设计（五步）**
+
+| 步骤 | 动作 | 关键点 |
+|---|---|---|
+| 1 | 算内容 md5 | `DigestUtils.md5DigestAsHex(InputStream)` **流式读**，不用 `getBytes()`（50MB 视频会整个进堆） |
+| 2 | 查 `file:md5:<md5>` | 命中就拿到已有 `objectKey` |
+| 3 | 没命中才 `ossUtil.upload` | 命中直接跳过 OSS |
+| 4 | **仍然写一条 `sys_file_info`** | 业务方要能按自己的 `businessId` 查到，秒传省的是上传不是入库 |
+| 5 | 真传才回填缓存（TTL 7 天） | 读写全 try-catch，缓存挂了退化到正常上传 |
+
+**🔴 最容易写错的一步：秒传写库失败时禁止补偿删除**
+
+```java
+} catch (Exception e) {
+    if(hit){
+        // 这个 objectKey 是别人上传时创建的，可能被 N 条记录引用
+        // 删了会把别人的记录全部搞挂
+        log.warn("秒传写库失败，objectKey={}",objectKey,e);
+    }else{
+        fileCompensator.compensateDelete(objectKey);   // 只有自己刚传的才能删
+    }
+}
+```
+
+**三个已知坑（面试会追问）**
+
+1. **md5 碰撞** —— 理论存在，实际极低；在意就换 SHA-256，或 md5 + size 双条件
+2. **秒传跨用户越权** —— A 传过的文件，B 秒传能拿到同一个 `objectKey`。本项目 OSS 是公开直链，可接受；私密文件必须校验权限，不能只认 md5
+3. **删除引用计数** —— 两条记录指向同一个 objectKey，删一条连带删 OSS，另一条悬空。本项目永久文件不自动删，风险低；真要做就得维护引用计数
+
+**概念澄清：句柄 ≠ 引用计数**
+
+- **句柄**解决「怎么访问」：一个标识符，程序拿着它去内核查表（`HANDLE` / fd / `FileDescriptor`），一次打开一个句柄
+- **引用计数**解决「什么时候能销毁」：多少使用者持有，归零才释放
+
+`objectKey` 不是句柄，是资源的逻辑地址；两条记录指向它叫**共享引用**。
+
+### 14.5 场景 5：AI 情绪分析结果缓存
+
+**key 的选择是分水岭**
+
+| 方案 | 效果 |
+|---|---|
+| `ai:emotion:<sessionId>` | ❌ 永远命中第一次的结果，情绪再也不更新 |
+| `ai:emotion:analysis:<md5(conversation)>` | ✅ 内容变了才重算 |
+
+**命中率低是设计意图，不是缺陷**
+
+正常聊天每轮 `conversation` 都在变 → md5 必变 → 永不命中。它挡的是**异常场景**：
+
+- 前端断线重连，同一条 AI 回复触发两次 `doOnComplete`
+- 网络抖动导致请求重试
+- 多实例部署时同一会话被两个节点处理
+
+**两个必判的空**
+
+1. `redis.get(key)` 返回 null → **先判 null 再 `JSONUtil.toBean`**，别把 null 丢进去（Hutool 碰巧返回 null，换库就炸）
+2. `.entity(Class)` 在模型返回非 JSON / 空串时**返回 null，不抛异常** → 必须判空，否则 `result.getPrimaryEmotion()` NPE 被外层 catch 吞掉，日志里什么都看不到
+
+**为什么这里的 md5 不用判空，FileService 的就要**
+
+| | 赋值方式 | 可能为 null |
+|---|---|---|
+| `FileService` | `md5=null` + `try{ md5=... }catch{}` | ✅ 可能（`getInputStream` 抛 `IOException`） |
+| `EmotionAnalysisService` | `md5=直接调用()` | ❌ 不可能（`getBytes(UTF_8)` 不抛受检异常） |
+
+**判断条件和赋值方式必须匹配**。`!=null` 描述的是「有没有失败路径」，不是「这个变量叫 md5」。
+
+### 14.6 编辑接口：`PUT /emotion-diary/{id}`
+
+```java
+LambdaUpdateWrapper<EmotionDiary> uw=new LambdaUpdateWrapper<EmotionDiary>()
+        .eq(EmotionDiary::getId,diaryId)
+        .eq(EmotionDiary::getUserId,userId)          // ← 这一行就是鉴权
+        .set(EmotionDiary::getMoodScore,dto.getMoodScore())
+        ...
+        .set(EmotionDiary::getUpdatedAt,LocalDateTime.now());
+
+if(emotionDiaryMapper.update(null,uw)==0){
+    throw new BusinessException("要修改的数据不存在");
+}
+```
+
+**三个关键点**
+
+1. **`update(null, wrapper)` 的 null** —— 传 entity 的话，它的非 null 字段也会进 `SET`，和手写的 `set` 打架；传 null 表示「完全按 wrapper 更新」
+2. **`diaryDate` 绝对不能 set** —— `UNIQUE(user_id, diary_date)`，改日期撞库后 `GlobalExceptionHandler` 会报「今天已经写过日记了」，用户完全看不懂
+3. **DTO 里绝不能加 `userId`** —— 身份只能来自 `@AuthenticationPrincipal`（JWT），`@RequestBody` 是前端可控的。加了就等于让攻击者自己填身份证号
+
+**两个 Java 坑**
+
+- `Long != Long` 比的是**引用**，只有 -128~127 走缓存，超出必错 → 包装类型一律 `equals`
+- `new LambdaUpdateWrapper<>()` 在链式调用里**必然推断失败**：泛型自引用 + 链式 + 菱形，三者凑齐时 Java 一次性推断不做迭代，退化到 `Object`，然后 `set` 签名变成 `SFunction<Object,?>`，`EmotionDiary::getMoodScore` 类型不匹配 → 编译器尝试把它当静态方法引用 → 报「无法从 static 上下文引用非 static 方法」。**这个报错是假线索，根因是类型推歪了。**
+
+### 14.7 验收记录（2026-10-18 实测，双 token 真调）
+
+| # | 用例 | 结果 |
+|---|---|---|
+| 1 | C 端 `GET /emotion-diary/admin/page` | `A0300 没有权限执行该操作` ✅ |
+| 2 | C 端 `DELETE /emotion-diary/admin/999999` | `A0300` ✅ |
+| 3 | C 端 `GET /emotion-diary/page` | `total=4`，全 `userId=10` ✅ |
+| 4 | C 端 `?userId=11` 伪造 | 仍 `total=4` 全 `userId=10` ✅ |
+| 5 | C 端 `DELETE /emotion-diary/31`（别人的） | 「要删除的数据不存在」，复查 id=31 仍在 ✅ |
+| 6 | 管理员 `?userId=11` | `total=1`，只有 id=31 ✅ |
+| 7 | 秒传：同文件传两次 | `filePath` 完全一致；`file:md5:*` TTL 604787 ✅ |
+| 8 | AI 缓存写入 | `ai:emotion:analysis:<md5>` 值完整 JSON，TTL 3584（1 小时倒计时）✅ |
+
+### 14.8 ⚠️ 遗留（明天总决战）
+
+| 优先级 | 项 | 说明 |
+|---|---|---|
+| 🔴 | **场景 3 Stream 任务队列** | 第 7 关最后一关，从零搭生产者/消费者/PEL/XACK，预计 4 小时 |
+| 🟡 | 编辑接口限流 | 照抄 `addEmotionDiary` 的计数器模板，key 用 `diary:user:edit:<userId>`，阈值 20 次/分钟 |
+| 🟡 | 新增日期范围 | 现在 `@PastOrPresent` 允许写到 1970 年，建议加「只能补写最近 N 天」 |
+| 🟡 | 第 8 关面试包装 | 直接抄 13.8 + 14.2~14.6，整理成「问题—方案—踩坑—收益」四段式 |
+| ⬜ | 前端响应式细节 | `.emotion-name` 的 `padding: 0 75px` 让每行只放 4 个卡片，可改 `0 12px` + `min-width` |
+| ⬜ | 手写流 → 注解流改造 | 见 11.6，第 7 关之后做 |
+
+**安全防线现状**（防刷用）
+
+| 层 | 措施 | 状态 |
+|---|---|---|
+| 身份 | 必须登录（JWT） | ✅ |
+| 归属 | `eq(userId)` | ✅ |
+| 一天一篇 | `UNIQUE(user_id, diary_date)` | ✅ |
+| 新增频率 | `diary:user:<userId>` 5 次/分钟 | ✅ |
+| 重复内容 | `diary:dup:<md5>` 60 秒 | ✅ |
+| 编辑频率 | 无 | ❌ 待补 |
+| 可写日期范围 | 只挡未来 | ⚠️ 待收窄 |
+
+> IP 层限流暂不做：所有写操作都要登录，token 已限定身份；真有几百账号同时刷属于攻击，该在网关层解决。
+
+---
+
+*本文档最后更新：2026-10-18。换电脑后：装 Redis（下 Release 不是 Source）→ 拉 `AI-mentalHealthSystem` → 读本文档第 0 节继续。*

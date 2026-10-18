@@ -93,8 +93,17 @@ public class UserController {
     @DeleteMapping("/emotion-diary/{id}")
     public Result<Void> deleteEmotionDiary(@PathVariable("id")Long diaryId,
                                            @AuthenticationPrincipal UserLoginResponseDTO.UserDetailResponseDTO user){
-        log.debug("Id{}要删除diary={}的日记",user.getId(),diaryId);
+        log.debug("Id{}要删除diary={}日记",user.getId(),diaryId);
         diaryService.deleteEmotionDiary(diaryId,user.getId(),false);
+        return Result.success();
+    }
+
+    @PutMapping("/emotion-diary/{id}")
+    public Result<Void> updateEmotionDiary(@PathVariable("id")Long diaryId,
+                                           @RequestBody DiaryCommandDTO commandDTO,
+                                           @AuthenticationPrincipal UserLoginResponseDTO.UserDetailResponseDTO user){
+        log.debug("Id={}要修改diary={}日记",user.getId(),diaryId);
+        diaryService.updateEmotionDiary(commandDTO,diaryId,user.getId());
         return Result.success();
     }
 

@@ -28,6 +28,7 @@ import org.springframework.util.StringUtils;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -43,7 +44,8 @@ public class DiaryService {
     private StringRedisTemplate redis;
 
     private static final String DIARY_DUP_LOCK="diary:dup:";
-    private static final String DIARY_USER_KEY="diary:user:";
+    private static final String DIARY_USER_QUERY_KEY="diary:user:";
+    private static final String DIARY_USER_EDIT_KEY="diary:user:edit:";
 
     public IPage<DiaryResponseDTO> getEmotionalPage(DiaryPageQueryDTO query,
                                                     Long userId,
@@ -92,9 +94,12 @@ public class DiaryService {
 
     //C端提交日记。userId 从 token 来，不让前端传 —— 防止给别人写日记
     public void addEmotionDiary(DiaryCommandDTO commandDTO, Long userId) {
+        if(commandDTO.getDiaryDate().isBefore(LocalDate.now().minusDays(30))){
+            throw new BusinessException("只能补写最近 30 天的日记");
+        }
         //一天一篇
         try {
-            String rateKey=DIARY_USER_KEY+userId;
+            String rateKey=DIARY_USER_QUERY_KEY+userId;
             Long n=redis.opsForValue().increment(rateKey);
             if(n==null)throw new Exception("Redis读取用户提交日记次数失败");
             if(n==1){
@@ -150,6 +155,43 @@ public class DiaryService {
             log.warn("userId={}的uv记录失败，快去修复",userId,e);
         }
     }
+
+    public void updateEmotionDiary(DiaryCommandDTO dto,
+                                   Long diaryId, Long userId) {
+        try {
+            String rateKey=DIARY_USER_EDIT_KEY+userId;
+            Long n=redis.opsForValue().increment(rateKey);
+            if (n!=null) {
+                if(n==1){
+                    Boolean expireDiaryUserId=redis.expire(rateKey,Duration.ofMinutes(1));
+                    if(!Boolean.TRUE.equals(expireDiaryUserId))
+                        log.warn("日记修改限流key设过期失败，key={}",rateKey);
+                }
+                if(n>20)throw new BusinessException("日记修改太频繁，请稍后再试");
+            }
+        }catch(BusinessException e){
+            throw e;
+        }catch (Exception e) {
+            log.warn("日记修改限流次数出错",e);
+        }
+
+        LambdaUpdateWrapper<EmotionDiary> uw=new LambdaUpdateWrapper<EmotionDiary>()
+                .eq(EmotionDiary::getId,diaryId)
+                .eq(EmotionDiary::getUserId,userId)//鉴权
+                .set(EmotionDiary::getMoodScore,dto.getMoodScore())
+                .set(EmotionDiary::getDiaryContent,dto.getDiaryContent())
+                .set(EmotionDiary::getDominantEmotion,dto.getDominantEmotion())
+                .set(EmotionDiary::getEmotionTriggers,dto.getEmotionTriggers())
+                .set(EmotionDiary::getSleepQuality,dto.getSleepQuality())
+                .set(EmotionDiary::getStressLevel,dto.getStressLevel())
+                .set(EmotionDiary::getUpdatedAt, LocalDateTime.now());
+
+        if(emotionDiaryMapper.update(null,uw)==0){
+            throw new BusinessException("要修改的数据不存在");
+        }
+
+    }
+
     private void releaseDupLock(Long userId,String fp){
         try{
             redis.delete(DIARY_DUP_LOCK+fp);
@@ -157,4 +199,5 @@ public class DiaryService {
             log.warn("释放日记防重复锁失败，等TTL过期，userId={}",userId,e);
         }
     }
+
 }

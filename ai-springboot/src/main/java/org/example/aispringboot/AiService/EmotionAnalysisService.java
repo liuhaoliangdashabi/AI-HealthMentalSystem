@@ -17,6 +17,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
 
+import javax.print.DocFlavor;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -37,9 +38,8 @@ public class EmotionAnalysisService {
     @Autowired
     private StringRedisTemplate redis;
 
-    //同一段对话只分析一次：重连、重试、并发触发都复用上次结果
-    private static final String AI_EMOTION_CACHE_PREFIX="ai:emotion:";
-    private static final Duration AI_EMOTION_CACHE_TTL=Duration.ofHours(24);
+    private static final String AI_EMOTION_ANALYSIS_KEY="ai:emotion:analysis:";
+    private static final Duration TTL=Duration.ofHours(1);
 
     @Async
     public void analyzeAsync(Long sessionId){
@@ -58,34 +58,28 @@ public class EmotionAnalysisService {
                             m.getContent())
                     .collect(Collectors.joining("\n"));
 
-            //用对话内容的指纹做 key：内容没变就不重复打大模型
-            String cacheKey=AI_EMOTION_CACHE_PREFIX+
-                    DigestUtils.md5DigestAsHex(conversation.getBytes(StandardCharsets.UTF_8));
+            //观前提醒：不是用来加速聊天的，防止同一段对话被重复计算
+            String md5= DigestUtils.md5DigestAsHex(conversation.getBytes(StandardCharsets.UTF_8));
+            String key=AI_EMOTION_ANALYSIS_KEY+md5;
             SessionEmotionResponseDTO result=null;
-            try{
-                String cached=redis.opsForValue().get(cacheKey);
-                if(cached!=null){
-                    result=JSONUtil.toBean(cached,SessionEmotionResponseDTO.class);
-                    log.info("会话{}情绪分析命中缓存，省一次大模型调用",sessionId);
-                }
-            }catch(Exception e){
-                log.warn("读AI情绪缓存失败，回源大模型，sessionId={}",sessionId,e);
-            }
 
-            if(result==null){
+            try{
+                String json=redis.opsForValue().get(key);
+                if(json!=null)result=JSONUtil.toBean(json, SessionEmotionResponseDTO.class);
+            }catch(Exception e){
+                log.warn("AI情绪分析读缓存失败",e);
+            }
+            boolean cacheHit=result!=null;
+            if(!cacheHit){
                 result=emotionClient.prompt()
                         .user(conversation)
                         .call()
                         .entity(SessionEmotionResponseDTO.class);
-                if(result==null){
-                    log.warn("会话{}情绪分析返回空，跳过本次入库",sessionId);
-                    return;
-                }
-                try{
-                    redis.opsForValue().set(cacheKey,JSONUtil.toJsonStr(result),AI_EMOTION_CACHE_TTL);
-                }catch(Exception e){
-                    log.warn("写AI情绪缓存失败，不影响本次结果，sessionId={}",sessionId,e);
-                }
+            }
+
+            if(result==null){
+                log.warn("没读中缓存也没得到模型答复，不写库，也不写缓存，直接返回");
+                return;
             }
 
             sessionMapper.update(null, new LambdaUpdateWrapper<ConsultationSession>()
@@ -93,6 +87,14 @@ public class EmotionAnalysisService {
                     .set(ConsultationSession::getLastEmotionAnalysis, JSONUtil.toJsonStr(result))
                     .set(ConsultationSession::getLastEmotionUpdatedAt, LocalDateTime.now()));
             log.info("会话{}情绪分析完成:{}",sessionId,result.getPrimaryEmotion());
+
+            if(!cacheHit && md5!=null){
+                try{
+                    redis.opsForValue().set(key, JSONUtil.toJsonStr(result), TTL);
+                }catch(Exception e){
+                    log.warn("情绪分析回填缓存失败",e);
+                }
+            }
         }catch(Exception e){
             log.warn("会话{}情绪分析失败，跳过本次",sessionId,e);
         }
