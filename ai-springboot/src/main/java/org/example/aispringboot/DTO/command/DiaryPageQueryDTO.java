@@ -16,6 +16,6 @@ public class DiaryPageQueryDTO {
     }
 
     public void setSize(Integer size) {
-        if(size!=null)this.size = size;
+        if(size!=null)this.size = Math.min(size,50);
     }
 }

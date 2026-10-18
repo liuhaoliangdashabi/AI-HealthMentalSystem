@@ -16,6 +16,7 @@ import org.example.aispringboot.exception.BusinessException;
 import org.example.aispringboot.mapper.UserMapper;
 import org.example.aispringboot.service.convert.UserConvert;
 import org.example.aispringboot.util.JwtTokenUtil;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CachePut;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -43,6 +44,7 @@ public class UserService {
 
     private static final int LOGIN_REQUEST_USERNAME_LIMIT_TIME = 10;
     private static final int LOGIN_REQUEST_IP_LIMIT_TIME = 30;
+    @Autowired
     private StringRedisTemplate redis;
 
     public UserService(BCryptPasswordEncoder passwordEncoder,

@@ -36,7 +36,9 @@ public class SignService {
         try{
             Boolean isSigned=redis.opsForValue().setBit(key,offset,true);
             if(Boolean.TRUE.equals(isSigned))return false;
-            redis.expire(key,SIGN_TTL);
+            if(!Boolean.TRUE.equals(redis.expire(key,SIGN_TTL))) {
+                log.warn("签到key设过期失败，key={}",key);
+            }
             return true;
         }catch(Exception e){
             log.warn("userId={}签到失败，快去修复",userId,e);
@@ -52,28 +54,45 @@ public class SignService {
 
         try{
             Long total=redis.execute((RedisCallback<Long>) conn->
-                    conn.bitCount(key.getBytes(StandardCharsets.UTF_8)));
+                    conn.stringCommands().bitCount(key.getBytes(StandardCharsets.UTF_8)));
             List<Integer> days=new ArrayList<>();
-            for(int day=1;day<=dayOfMonth;day++){
-                //只查今天及以前
-                Boolean isSigned=redis.opsForValue().getBit(key,day-1);
-                if(Boolean.TRUE.equals(isSigned))days.add(day);
+//            for(int day=1;day<=dayOfMonth;day++){
+//                //只查今天及以前
+//                Boolean isSigned=redis.opsForValue().getBit(key,day-1);
+//                if(Boolean.TRUE.equals(isSigned))days.add(day);
+//            }
+            String raw=redis.opsForValue().get(key);
+//            List<Integer> redisGetDays=new ArrayList<>();
+            if(raw!=null){
+                byte[] bits=raw.getBytes(StandardCharsets.ISO_8859_1);
+                for(int day=1;day<=dayOfMonth;day++){
+                    int i=day-1;
+                    //(仿)一个位图
+                    if(((bits[i/8]>>(7-i%8))&1)==1)days.add(day);
+                }
             }
 
-            Map<String,Object> result=new LinkedHashMap<>();
-            result.put("total",total==null?0:total);
-            result.put("days",days);
-            result.put("todaySigned",days.contains(dayOfMonth));
-            result.put("daysInMonth",daysInMonth);
-            return result;
+            return buildSignResult(total==null?0L:total,
+                    days,dayOfMonth,daysInMonth);
         }catch(Exception e){
             log.warn("userId={}查询签到状态失败，快去修复",userId,e);
-            return Map.of("total",0,"days",List.of(),
-                    "todaySigned",false,"daysInMonth",daysInMonth);
+            return buildSignResult(0L,List.of(),
+                    dayOfMonth,daysInMonth);
         }
     }
 
     private String buildKey(Long userId,LocalDate date){
         return SIGN_KEY+userId+":"+date.format(MONTH_FMT);
     }
+
+    private Map<String,Object> buildSignResult(long total,List<Integer> days,
+                                               int dayOfMonth,int daysInMonth){
+        Map<String,Object> result=new LinkedHashMap<>();
+        result.put("total",total);
+        result.put("days",days);
+        result.put("todaySigned",days.contains(dayOfMonth));
+        result.put("daysInMonth",daysInMonth);
+        return result;
+    }
+
 }

@@ -27,7 +27,10 @@ public class FileCleanupTask {
     private StringRedisTemplate redis;
 
     private static final String LOCK_KEY="lock:fileCleanup";
-    private static final Duration LOCK_TTL=Duration.ofSeconds(30);
+    //调度间隔 20 分钟（cron 0 */20 * * * ?），锁的作用只是防多实例并发
+    //TTL 必须大于单轮最坏耗时：否则任务还在删 OSS，锁先过期，另一个实例抢到锁就会重复清理同一批
+    //若将来孤儿文件可能上万、单轮耗时接近 15 分钟，就要改成续期（watchdog）或分批限流
+    private static final Duration LOCK_TTL=Duration.ofMinutes(15);
     private static final DefaultRedisScript<Long> UNLOCK_SCRIPT =
             new DefaultRedisScript<>(
                     "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
@@ -36,7 +39,7 @@ public class FileCleanupTask {
     @Scheduled(cron="0 */20 * * * ?")
     public void cleanupOrphans(){
         String randomToken= UUID.randomUUID().toString();
-        Boolean locked=null;
+        Boolean locked;
         try {
             locked = redis.opsForValue().setIfAbsent(LOCK_KEY, randomToken,LOCK_TTL);
         } catch (Exception e) {

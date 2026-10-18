@@ -9,6 +9,7 @@ import org.example.aispringboot.entity.User;
 import org.example.aispringboot.exception.BusinessException;
 import org.example.aispringboot.mapper.ConsultationSessionMapper;
 import org.example.aispringboot.mapper.UserMapper;
+import org.example.aispringboot.util.RedisKeys;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -26,8 +27,6 @@ public class ConsultationSessionsService {
     @Autowired
     private StringRedisTemplate redis;
 
-    private static final Duration UV_TTL=Duration.ofDays(40);
-
     public ConsultationSession createSession(Long userId, ConsultationSectionCreateDTO createDTO){
         //先验证用户是否存在，数据插入才有意义
         User user=userMapper.selectById(userId);
@@ -43,9 +42,9 @@ public class ConsultationSessionsService {
 
             consultationSessionMapper.insert(session);
             try{
-                String key="uv:"+session.getStartedAt().toLocalDate();
+                String key= RedisKeys.uv(session.getStartedAt().toLocalDate());
                 redis.opsForHyperLogLog().add(key,String.valueOf(userId));
-                if(!Boolean.TRUE.equals(redis.expire(key,UV_TTL))){
+                if(!Boolean.TRUE.equals(redis.expire(key,RedisKeys.UV_TTL))){
                     log.warn("UV key设过期时间失败，key={}",key);
                 }
             }catch(Exception e){

@@ -9,6 +9,7 @@ import org.example.aispringboot.common.Result;
 import org.example.aispringboot.service.*;
 import org.example.aispringboot.util.OSSUtil;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -33,7 +34,7 @@ public class KnowledgeController {
     @Autowired
     private OSSUtil ossUtil;
 
-    //--------------------------------category相关
+    //---------------------------------category相关
 
     @GetMapping("/knowledge/category/tree")
     public Result<List<CategoryResponseDTO>> categoryTree(
@@ -75,8 +76,8 @@ public class KnowledgeController {
             @Valid @RequestBody ArticleCommandDTO commandDTO,
             @AuthenticationPrincipal UserLoginResponseDTO.UserDetailResponseDTO user){
         log.debug("Id={}新建文章",user.getId());
-        String username=user.getUsername().isBlank()?
-                user.getEmail():user.getUsername();
+//        String username=user.getUsername().isBlank()?
+//                user.getEmail():user.getUsername();
         articleService.createArticle(commandDTO,user.getId());
         return Result.success();
     }
@@ -122,26 +123,30 @@ public class KnowledgeController {
 
 
 
-    //-------------------------------------Consultation相关
-    // 会话列表、会话消息已移到 PsycholigicalChatController
+    //------------------------------------------Consultation相关
+    //会话列表、会话消息已移到PsycholigicalChatController
 
     //-----------------------------------Emotion-diary相关
+    @PreAuthorize("hasRole('2')")
     @GetMapping("/emotion-diary/admin/page")
-    public Result<IPage<DiaryResponseDTO>> getEmotionalPage( DiaryPageQueryDTO queryDTO){
+    public Result<IPage<DiaryResponseDTO>> getEmotionalPage( DiaryPageQueryDTO queryDTO,
+                                                             @AuthenticationPrincipal UserLoginResponseDTO.UserDetailResponseDTO user){
         log.debug("查询情感日记列表，current={}，size={}",queryDTO.getCurrent(),queryDTO.getSize());
-        IPage<DiaryResponseDTO> responseDTO=diaryService.getEmotionalPage(queryDTO);
+        IPage<DiaryResponseDTO> responseDTO=
+                diaryService.getEmotionalPage(queryDTO,user.getId(),true);
         return Result.success(responseDTO);
     }
 
+    @PreAuthorize("hasRole('2')")
     @DeleteMapping("/emotion-diary/admin/{id}")
     public Result<Void> deleteEmotionDiary(@PathVariable("id")Long diaryId,
                                            @AuthenticationPrincipal UserLoginResponseDTO.UserDetailResponseDTO user){
         log.debug("Id={}要删除diaryId={}的日记",user.getId(),diaryId);
-        diaryService.deleteEmotionDiary(diaryId);
+        diaryService.deleteEmotionDiary(diaryId, user.getId(),true);
         return Result.success();
     }
 
-    //-------------------------------------File相关
+    //------------------------------------------------File相关
     //返回两个：filePath 是入库用的相对路径，fileUrl 是前端预览用的完整地址
     @PostMapping("/file/upload")
     public Result<Map<String,String>> uploadFile(@RequestParam("file") MultipartFile file,
@@ -166,7 +171,7 @@ public class KnowledgeController {
     }
 
     @GetMapping("/data-analytics/uv-trend")
-    public Result<List<AnalyticsOverviewResponseDTO.UserActivityItem>> uvTrend(
+    public Result<List<UvTrendItem>> uvTrend(
             @AuthenticationPrincipal UserLoginResponseDTO.UserDetailResponseDTO user){
         log.debug("Id={}查询UV趋势",user.getId());
         return Result.success(analyticsService.getUVTrend());

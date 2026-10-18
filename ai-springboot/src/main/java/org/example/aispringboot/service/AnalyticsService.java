@@ -8,6 +8,7 @@ import org.example.aispringboot.DTO.response.AnalyticsOverviewResponseDTO.DailyT
 import org.example.aispringboot.DTO.response.AnalyticsOverviewResponseDTO.EmotionTrendItem;
 import org.example.aispringboot.DTO.response.AnalyticsOverviewResponseDTO.SystemOverview;
 import org.example.aispringboot.DTO.response.AnalyticsOverviewResponseDTO.UserActivityItem;
+import org.example.aispringboot.DTO.response.UvTrendItem;
 import org.example.aispringboot.entity.ConsultationMessage;
 import org.example.aispringboot.entity.ConsultationSession;
 import org.example.aispringboot.entity.EmotionDiary;
@@ -17,6 +18,7 @@ import org.example.aispringboot.mapper.ConsultationSessionMapper;
 import org.example.aispringboot.mapper.EmotionDiaryMapper;
 import org.example.aispringboot.mapper.UserMapper;
 import org.example.aispringboot.service.convert.AnalyticsConvert;
+import org.example.aispringboot.util.RedisKeys;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -44,16 +46,11 @@ public class AnalyticsService {
     @Autowired
     private StringRedisTemplate redis;
 
-    private static final String UV_KEY="uv:";
-    //这天查过库，结果就是0
-    private static final String UV_EMPTY_KEY="uv:empty:";
-    private static final Duration UV_TTL=Duration.ofDays(40);
-
     public AnalyticsOverviewResponseDTO getOverview() {
         LocalDate today = LocalDate.now();
         LocalDate since = today.minusDays(RECENT_DAYS - 1L);
 
-        //数据量不大，直接走BaseMapper全量拉取、在内存里聚合，不写GROUP BY
+        //数据量不大，直接读库全量拉取、在内存里聚合，不写GROUP BY
         List<User> users = userMapper.selectList(null);
         List<EmotionDiary> diaries = emotionDiaryMapper.selectList(null);
         List<ConsultationSession> sessions = consultationSessionMapper.selectList(null);
@@ -130,20 +127,20 @@ public class AnalyticsService {
                 emotionTrend, userActivity);
     }
 
-    public List<UserActivityItem> getUVTrend(){
+    public List<UvTrendItem> getUVTrend(){
         LocalDate today= LocalDate.now();
         LocalDate since=today.minusDays(RECENT_DAYS-1L);
         Map<LocalDate,Long> uvByDay=new LinkedHashMap<>();
         List<LocalDate> needDb=new ArrayList<>();
         boolean redisDown=false;
         for(LocalDate day=since;!day.isAfter(today);day=day.plusDays(1)){
-            String key=UV_KEY+day;
-            Long count=null;
+            String key= RedisKeys.uv(day);
+            Long count;
             try{
                 count=redis.opsForHyperLogLog().size(key);
-                if (count==null||count==0L) {
+                if (count==0L) {
                     boolean hasData=Boolean.TRUE.equals(redis.hasKey(key));
-                    boolean knownEmpty=Boolean.TRUE.equals(redis.hasKey(UV_EMPTY_KEY+day));
+                    boolean knownEmpty=Boolean.TRUE.equals(redis.hasKey(RedisKeys.uvEmpty(day)));
                     //可能真没人访问，也可能key不存在
                     if(!hasData && !knownEmpty){
                         needDb.add(day);
@@ -159,7 +156,7 @@ public class AnalyticsService {
                 }
                 break;
             }
-            uvByDay.put(day,count==null?0L:count);
+            uvByDay.put(day,count);
         }
 
         if(!needDb.isEmpty()){
@@ -173,9 +170,9 @@ public class AnalyticsService {
             }
         }
 
-        List<UserActivityItem> trend=new ArrayList<>();
+        List<UvTrendItem> trend=new ArrayList<>();
         for(LocalDate day=since;!day.isAfter(today);day=day.plusDays(1)){
-            UserActivityItem item=new UserActivityItem();
+            UvTrendItem item=new UvTrendItem();
             item.setDate(day.toString());
             item.setActiveUsers(uvByDay.getOrDefault(day,0L));
             trend.add(item);
@@ -204,14 +201,14 @@ public class AnalyticsService {
     private void writeBackToRedis(LocalDate day,Set<Long> userIds){
         try{
             if(userIds.isEmpty()){
-                redis.opsForValue().set(UV_EMPTY_KEY+day,"1",UV_TTL);
+                redis.opsForValue().set(RedisKeys.uvEmpty(day),"1",RedisKeys.UV_TTL);
                 return;
             }
-            String key=UV_KEY+day;
+            String key=RedisKeys.uv(day);
             redis.opsForHyperLogLog().add(key,
                     userIds.stream().map(String::valueOf).toArray(String[]::new));
 
-            redis.expire(key,UV_TTL);
+            redis.expire(key,RedisKeys.UV_TTL);
         }catch(Exception e){
             log.warn("UV回存失败，date={}",day,e);
         }
