@@ -1,6 +1,5 @@
 package org.example.aispringboot.util;
 
-
 import java.time.Duration;
 import java.time.LocalDate;
 
@@ -42,13 +41,11 @@ public class RedisKeys {
     public static final String ARTICLE_HOT_DAY_PREFIX="article:hot:";
 
     //窗口天数：预热和查询都引用它，改窗口只改这一处
-    //★ 必须声明在 ARTICLE_HOT_WINDOW 之前 —— static final 按书写顺序初始化，
-    //  反过来写会直接编译报错（illegal forward reference）
+    //必须声明在 ARTICLE_HOT_WINDOW 之前，static final 按书写顺序初始化，反过来写会报 illegal forward reference
     public static final int ARTICLE_HOT_WINDOW_DAYS=7;
 
     //最近 N 天的合并结果，定时 ZUNIONSTORE 预热
-    //★ 拼上天数，改窗口时 key 自动跟着变。写死 "7d" 的话，
-    //  哪天把天数改成 14，key 还是 article:hot:7d，名字和内容就对不上了
+    //拼上天数，改窗口时 key 自动跟着变，避免名字和内容对不上
     public static final String ARTICLE_HOT_WINDOW="article:hot:"+ARTICLE_HOT_WINDOW_DAYS+"d";
 
     //合并结果的 TTL，要比预热间隔(30秒)长；但不能太长，否则任务停了前端还在看旧榜
@@ -61,8 +58,7 @@ public class RedisKeys {
     //========== 在线用户（ZSet 心跳）==========
 
     //完整 key。member = userId，score = 最后一次活跃的毫秒时间戳
-    //★ 为什么是 ZSet 不是 Set：Set 只能回答"谁来过"，回答不了"谁还在"。
-    //  要判断"还在不在"必须按时间过滤，而按分数范围过滤正是 ZSet 的强项
+    //用 ZSet 不用 Set：Set 只能回答"谁来过"，要判断"还在不在"必须按时间过滤
     public static final String ONLINE_USERS="online:users";
 
     //超过这么久没有请求，就认为已离线。前端没有心跳接口，只能靠"访问页面"续命

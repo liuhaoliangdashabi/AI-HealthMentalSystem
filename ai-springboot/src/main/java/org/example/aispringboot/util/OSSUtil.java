@@ -30,8 +30,6 @@ public class OSSUtil {
             ".webp", "image/webp"
     );
 
-
-
     //允许的图片后缀
     private static final Set<String> ALLOWED_EXT = Set.of(".jpg", ".jpeg", ".png", ".gif", ".webp");
 
@@ -52,8 +50,8 @@ public class OSSUtil {
      * 上传文件
      *
      * @param file   前端传来的文件
-     * @param prefix 业务前缀，如 "article" / "avatar"
-     * @return objectKey（相对路径）—— 存进数据库的就是它
+     * @param prefix 业务前缀，如 article / avatar
+     * @return objectKey（相对路径），存进数据库的就是它
      */
     public String upload(MultipartFile file, String prefix) {
         //① 校验（前端也校验了，但前端能绕过，后端必须再来一遍）
@@ -94,10 +92,10 @@ public class OSSUtil {
     }
 
     /**
-     * objectKey → 完整可访问的 URL
+     * objectKey 转完整可访问的 URL
      *
      * @param objectKey 数据库里存的相对路径
-     * @return 完整 URL；传空返回 null
+     * @return 完整 URL，传空返回 null
      */
     public String getUrl(String objectKey) {
         if (objectKey == null || objectKey.isBlank()) {
@@ -110,10 +108,7 @@ public class OSSUtil {
         return ossConfig.buildBaseUrl() + "/" + stripLeadingSlash(objectKey);
     }
 
-    /**
-     * 删除文件（换封面时清理旧的用）
-     * 删失败不影响主流程，所以只记警告不抛异常
-     */
+    /** 删除文件，换封面时清理旧的用。删失败不影响主流程，只记警告不抛异常。 */
     public void delete(String objectKey) {
         if (objectKey == null || objectKey.isBlank()) {
             return;
@@ -131,10 +126,6 @@ public class OSSUtil {
             log.warn("删除 OSS 文件失败：objectKey={}", objectKey, e);
         }
     }
-
-
-
-
 
     //取后缀，统一转小写。没有后缀返回空串
     private String extractSuffix(String originalFilename) {

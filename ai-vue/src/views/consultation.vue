@@ -19,8 +19,7 @@
                     <div class="garden-title">情绪花园</div>
                 </div>
                 <div class="emotion-info">
-                    <!-- ⚠️ 这里以前是写死的「中性 / 50」，所以不管分析结果是什么，
-                         画面上永远显示"中性 50" —— 看起来就像分析从来没生效过。 -->
+                    <!-- 这里以前写死「中性 / 50」，不管分析结果是什么都显示"中性 50" -->
                     <div class="emotion-name">
                         {{ emotionAnalyzing ? '分析中' : (currentEmotion.primaryEmotion || '中性') }}
                     </div>
@@ -240,10 +239,9 @@ const currentEmotion=ref(getDefaultEmotion())
 //=================== 情绪花园刷新 ===================
 //会话结束 → 后端异步分析（模型 5~10 秒）→ 这里轮询等结果。
 //
-//★ 判据用后端的 analyzed 字段，不用"值变没变"：
-//  没算完时后端返回的是一堆默认值（强度 50、风险 0、primaryEmotion 为 null），
-//  拿默认值跟默认值比永远是"没变"；而 primaryEmotion 从"中性"变成 null 又会被
-//  误判成"变了" —— 上一版就是这么在【第一次轮询就停掉】的，用户只能手动点会话。
+//判据用后端的 analyzed 字段，不用"值变没变"。
+//没算完时后端返回的是一堆默认值，拿默认值和默认值比永远是"没变"，
+//而 primaryEmotion 从"中性"变成 null 又会被误判成"变了"，导致第一次轮询就停掉。
 let emotionTimer=null
 let emotionPollToken=0     //换会话/再发消息时 +1，让上一轮轮询自己作废
 const emotionAnalyzing=ref(false)
@@ -318,7 +316,6 @@ const sendMessage=()=>{
     }
     const message=userMessage.value.trim()
     userMessage.value=''
-    
     //若没有会话/临时会话，调用接口，创建一个新的会话记录
     if(currentSession.value.status==='TEMP'){
         startNewSession(message)
@@ -345,7 +342,6 @@ const startNewSession=(message)=>{
         sessionParams.sessionTitle=currentSession.value.sessionTitle
     }
     startSession(sessionParams).then(res=>{
-        console.log(res)
         const sessionData={
             sessionId:res.sessionId,
             status:res.status,
@@ -370,7 +366,6 @@ const startNewSession=(message)=>{
         startAIResponse(currentSession.value.sessionId,message)
     })
 }
- 
 const startAIResponse=(sessionId,userMessage)=>{
     //防止重复发送
     if(isAiTyping.value){
@@ -398,7 +393,6 @@ const startAIResponse=(sessionId,userMessage)=>{
         body:JSON.stringify({sessionId,userMessage}),
         signal:ctrl.signal,
         onopen:(response)=>{
-            console.log(response)
             if(response.headers.get('Content-Type')!=='text/event-stream'){
                 ElMessage.error("服务器返回非流式数据")
             }
@@ -454,7 +448,6 @@ const handleSessionClick=(session)=>{
     emotionAnalyzing.value=false
 
     getSessionDetail(session.id).then(res=>{
-        console.log(res)
         sumMessage.value=res
     })
     loadSessionEmotion(session.id)
@@ -473,7 +466,6 @@ const handleDeleteSession=(sessionId)=>{
         type: 'warning'
     }).then(() => {
         deleteSession(sessionId).then(res=>{
-            console.log(res)
             ElMessage.success('删除成功')
             getSessionPage()
         })
@@ -495,7 +487,6 @@ const getSessionPage=()=>{
         pageNum:1,
         pageSize:10
     }).then(res=>{
-        console.log("完整session：",res.records?.[0])
         sessionList.value=res.records
     })
 }
@@ -515,10 +506,8 @@ const formatMessageContent=(content)=>{
     return escapeHtml(content).replace(/\n/g,'<br/>')
 }
 
-//★ 这个方法在【模板渲染路径】上被调用（模板第 33 行，v-for="dot in 3" 里一次渲染调 3 次）。
-//  所以不能 throw —— 一抛异常 Vue 的渲染函数就崩，整个会话页停止更新，
-//  表现是"点了没反应、删了不掉"，而且不报错，极难排查。
-//  判断条件保持原样：只有"确实是数字但超出 0-100"才提示
+//这个方法在模板渲染路径上被调用，不能 throw。一抛异常 Vue 渲染函数就崩，
+//整个会话页停止更新，而且不报错，极难排查。
 const getIntensityClass=(score)=>{
     const n=Number(score)
     if(Number.isFinite(n)&&(n<0||n>100)){
@@ -690,7 +679,6 @@ onBeforeUnmount(()=>{
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
-                
             }
             .session-list {
                 overflow-y: auto;
@@ -782,7 +770,6 @@ onBeforeUnmount(()=>{
             position: relative;
             overflow: hidden;
             min-height: 300px;
-            
             .garden-header {
                 display: flex;
                 align-items: center;

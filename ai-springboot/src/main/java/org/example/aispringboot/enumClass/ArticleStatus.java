@@ -23,9 +23,7 @@ public enum ArticleStatus {
         this.description = description;
     }
 
-    /**
-     * 根据代码获取枚举
-     */
+    /** 根据代码获取枚举 */
     public static ArticleStatus fromCode(Integer code) {
         for (ArticleStatus status : ArticleStatus.values()) {
             if (status.getCode().equals(code)) {
@@ -35,9 +33,7 @@ public enum ArticleStatus {
         throw new IllegalArgumentException("未知的文章状态代码: " + code);
     }
 
-    /**
-     * 验证文章状态代码是否有效
-     */
+    /** 验证文章状态代码是否有效 */
     public static boolean isValidCode(Integer code) {
         for (ArticleStatus status : ArticleStatus.values()) {
             if (status.getCode().equals(code)) {

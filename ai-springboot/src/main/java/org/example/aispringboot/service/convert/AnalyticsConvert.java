@@ -9,9 +9,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
 
-/**
- * 数据分析模块的转换方法。
- */
+/** 数据分析模块的转换方法。 */
 public class AnalyticsConvert {
 
     public static AnalyticsOverviewResponseDTO toResponse(AnalyticsOverviewResponseDTO.SystemOverview systemOverview,

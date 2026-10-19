@@ -16,9 +16,7 @@ public enum UserType {
         this.description = description;
     }
 
-    /**
-     * 根据代码获取枚举
-     */
+    /** 根据代码获取枚举 */
     public static UserType fromCode(Integer code) {
         for (UserType type : UserType.values()) {
             if (type.getCode().equals(code)) {
@@ -28,9 +26,7 @@ public enum UserType {
         throw new IllegalArgumentException("未知的用户类型代码: " + code);
     }
 
-    /**
-     * 验证用户类型代码是否有效
-     */
+    /** 验证用户类型代码是否有效 */
     public static boolean isValidCode(Integer code) {
         for (UserType type : UserType.values()) {
             if (type.getCode().equals(code)) {

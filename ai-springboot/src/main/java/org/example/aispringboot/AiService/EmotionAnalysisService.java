@@ -106,17 +106,9 @@ public class EmotionAnalysisService {
     }
 
     /**
-     * 分析一篇<b>情绪日记</b>，结果写回 {@code emotion_diary.ai_emotion_analysis}。
-     *
-     * <p><b>为什么不能复用上面 {@link #analyze(Long)} 的缓存：</b>
-     * 那个方法的 key 是 {@code md5(整段对话原文)}。日记详情手里只有一个 diaryId 和一段日记正文，
-     * 它拼不出「用户：xxx / AI： xxx」这种对话串，也就<b>算不出那个 md5</b>。
-     * 不是"没去读缓存"，是"读不到"—— <b>key 的设计决定了只有知道对话原文的人才能命中它</b>。
-     *
-     * <p><b>为什么结果存数据库而不是 Redis：</b>
-     * Redis 是「易失的、带 TTL 的加速层」，数据库字段是「持久的、可追溯的结果」。
-     * 用户半年后翻回这篇日记，仍然应该看到当时的分析 —— 这种东西不该住在 1 小时就过期的 key 里。
-     * 所以这里的"缓存"就是那个字段本身：有值就不再调模型，改日记时把它清空。
+     * 分析一篇情绪日记，结果写回 emotion_diary.ai_emotion_analysis。
+     * 不能复用 analyze(Long) 的缓存：那个 key 是 md5(整段对话原文)，日记详情拼不出对话串。
+     * 结果存数据库而不是 Redis，因为要持久可追溯，用户半年后翻回来还得看到当时的分析。
      *
      * @return true 表示可以 ACK（成功，或这条任务本来就不该重试）；false 表示留给 PEL 兜底重投
      */
@@ -158,12 +150,7 @@ public class EmotionAnalysisService {
         return true;
     }
 
-    /**
-     * 把日记拼成给模型的输入。
-     *
-     * <p>自评的四个数字（情绪分/睡眠/压力）也一起喂进去 —— 用户自己打的分是有信息量的，
-     * 光看文字容易把"我挺好的"这种反话判成正向。
-     */
+    /** 把日记拼成给模型的输入。自评的情绪分、睡眠、压力也一起喂进去，光看文字容易把反话判成正向。 */
     private String buildDiaryPrompt(EmotionDiary diary){
         StringBuilder sb=new StringBuilder();
         if(diary.getDiaryContent()!=null && !diary.getDiaryContent().isBlank()){

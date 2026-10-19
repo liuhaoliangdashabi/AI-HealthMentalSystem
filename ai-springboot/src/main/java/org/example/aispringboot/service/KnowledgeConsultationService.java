@@ -36,10 +36,7 @@ public class KnowledgeConsultationService {
     @Autowired
     private UserMapper userMapper;
 
-    /**
-     * 会话列表 —— AB端和C端【共用同一个接口】
-     * 差别只有可见范围：管理员看全部，普通用户只看自己的
-     */
+    /** 会话列表，AB 端和 C 端共用。管理员看全部，普通用户只看自己的。 */
     public IPage<ConsultationSessionResponseDTO> getConsultationPage(ConsultationPageQueryDTO query,
                                                                      UserLoginResponseDTO.UserDetailResponseDTO user) {
         boolean isAdmin = UserType.ADMIN.getCode().equals(user.getUserType());
@@ -91,9 +88,7 @@ public class KnowledgeConsultationService {
 
     }
 
-    /**
-     * 会话消息列表 —— 同样AB端和C端共用一个接口，权限在这里判
-     */
+    /** 会话消息列表，AB 端和 C 端共用，权限在这里判。 */
     public List<ConsultationMessageResponseDTO> getConsultationDetail(Long sessionId,
                                                                       UserLoginResponseDTO.UserDetailResponseDTO user) {
         ConsultationSession session=sessionMapper.selectById(sessionId);
@@ -112,10 +107,7 @@ public class KnowledgeConsultationService {
         return messages.stream().map(ConsultationConvert::messageToResponse).toList();
     }
 
-    /**
-     * 删除会话 —— 两张表（会话 + 消息），所以必须在一个事务里
-     * 结构和"删除知识分类"完全一样：先处理子表，再删主表
-     */
+    /** 删除会话，会话和消息两张表，必须在一个事务里，先删子表再删主表。 */
     @Transactional
     public void deleteSession(Long sessionId, UserLoginResponseDTO.UserDetailResponseDTO user) {
         ConsultationSession session=sessionMapper.selectById(sessionId);
@@ -131,10 +123,7 @@ public class KnowledgeConsultationService {
         log.info("用户{}删除会话{}，连带删除{}条消息",user.getId(),sessionId,deleted);
     }
 
-    /**
-     * 会话最后的情绪分析结果
-     * 库里 last_emotion_analysis 存的就是一段 JSON，直接反序列化成 DTO
-     */
+    /** 会话最后的情绪分析结果。库里 last_emotion_analysis 是一段 JSON，直接反序列化。 */
     public SessionEmotionResponseDTO getSessionEmotion(Long sessionId,
                                                        UserLoginResponseDTO.UserDetailResponseDTO user) {
         ConsultationSession session=sessionMapper.selectById(sessionId);
@@ -162,12 +151,7 @@ public class KnowledgeConsultationService {
         }
     }
 
-    /**
-     * 补全 null 字段。
-     * 前端模板里有 `currentEmotion.improvementSuggestions.length>0` 这种写法，
-     * 一旦这个字段是 null，Vue 的渲染函数就抛 TypeError，【整个会话页会停止更新】——
-     * 表现出来就是"点会话没反应"、"删了不掉"。所以这里保证集合类字段永远不是 null。
-     */
+    /** 补全 null 字段。前端有 improvementSuggestions.length 这类写法，字段为 null 会抛 TypeError 导致整页停止更新。 */
     private SessionEmotionResponseDTO normalize(SessionEmotionResponseDTO dto){
         if(dto.getImprovementSuggestions()==null) dto.setImprovementSuggestions(List.of());
         if(dto.getEmotionScore()==null) dto.setEmotionScore(50);

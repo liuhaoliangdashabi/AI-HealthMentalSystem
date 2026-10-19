@@ -73,11 +73,9 @@ const rules=reactive({
 
 const submitForm=async(formEl)=>{
     if(!formEl)return
-    console.log(JSON.stringify(formData))
     if(!formData.phone)formData.phone=null
     await formEl.validate(async(valid)=>{
         register(formData).then(({data})=>{
-            console.log(data)
             if(!data){
                 ElMessage.success('注册成功')
                 router.push('/auth/login')

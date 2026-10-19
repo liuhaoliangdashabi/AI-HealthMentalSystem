@@ -5,9 +5,7 @@ import org.example.aispringboot.util.RedisKeys;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
-/**
- * 在线用户统计。ZSet 存 userId -> 最后活跃时间戳，统计前先清掉超时的成员。
- */
+/** 在线用户统计。ZSet 存 userId -> 最后活跃时间戳，统计前先清掉超时的成员。 */
 @Slf4j
 @Service
 public class OnlineUserService {

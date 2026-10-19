@@ -22,9 +22,7 @@ public enum TaskPriority {
         this.description = description;
     }
 
-    /**
-     * 根据代码获取枚举
-     */
+    /** 根据代码获取枚举 */
     public static TaskPriority fromCode(Integer code) {
         for (TaskPriority priority : TaskPriority.values()) {
             if (priority.getCode().equals(code)) {
@@ -34,9 +32,7 @@ public enum TaskPriority {
         throw new IllegalArgumentException("未知的任务优先级: " + code);
     }
 
-    /**
-     * 验证任务优先级代码是否有效
-     */
+    /** 验证任务优先级代码是否有效 */
     public static boolean isValidCode(Integer code) {
         for (TaskPriority priority : TaskPriority.values()) {
             if (priority.getCode().equals(code)) {

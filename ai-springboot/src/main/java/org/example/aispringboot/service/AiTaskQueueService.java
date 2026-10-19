@@ -25,15 +25,9 @@ public class AiTaskQueueService {
     }
 
     /**
-     * 投递「日记分析」任务。
-     *
-     * <p>跟会话分析共用同一条 Stream，靠 {@code type} 字段分流。
-     * 为什么不另起一条 Stream：两种任务的<b>生命周期完全一样</b>
-     * （都可能卡死、都要 PEL 兜底、都要转死信），拆两条就要维护两套兜底逻辑。
-     * 用字段区分类型，比用 key 区分更省事。
-     *
-     * <p>⚠️ 老消息里可能没有 {@code type} 字段（这行是后加的），消费者要把它当
-     * {@code EMOTION_ANALYSIS} 处理，否则历史积压全变毒消息。
+     * 投递日记分析任务。和会话分析共用一条 Stream，靠 type 字段分流。
+     * 两种任务的生命周期一样，都要 PEL 兜底、都要转死信，拆两条 Stream 就得维护两套兜底逻辑。
+     * 老消息可能没有 type 字段，消费者要按 EMOTION_ANALYSIS 处理，否则历史积压全变毒消息。
      */
     public void enqueueDiaryAnalysis(Long diaryId){
         try{

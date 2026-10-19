@@ -135,7 +135,6 @@ const userActiveChartRef=ref(null)
 
 onMounted(()=>{
     getAnalyticsOverview().then(res=>{
-        console.log(res)
         aiData.value=res
         initCharts()
     })

@@ -53,9 +53,7 @@ public class ConsultationMessage {
     @TableField("created_at")
     private LocalDateTime createdAt;
 
-    /**
-     * 获取发送者类型描述
-     */
+    /** 获取发送者类型描述 */
     public String getSenderTypeDesc() {
         if (senderType == null) {
             return "未知";
@@ -67,9 +65,7 @@ public class ConsultationMessage {
         };
     }
 
-    /**
-     * 获取消息类型描述
-     */
+    /** 获取消息类型描述 */
     public String getMessageTypeDesc() {
         if (messageType == null) {
             return "未知";

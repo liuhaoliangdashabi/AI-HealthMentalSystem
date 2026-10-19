@@ -15,7 +15,6 @@ const backendRoutes=[
                 meta:{
                     title:'数据分析',
                     icon:'PieChart'
-                    
                 }
             },
             {

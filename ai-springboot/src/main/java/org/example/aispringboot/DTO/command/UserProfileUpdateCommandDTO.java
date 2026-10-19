@@ -12,12 +12,8 @@ import lombok.Data;
 import java.time.LocalDate;
 
 /**
- * 个人资料修改入参。
- *
- * 刻意「不含」这些字段，不是漏了：
- * - username：唯一键 + 登录凭据，改名等于换身份，要走独立的重名校验流程
- * - password：走独立的改密接口（要验旧密码），不能跟资料混在一起
- * - userType / status：越权字段，用户自己填了就能提权 / 解封
+ * 个人资料修改入参。刻意不含 username（登录凭据）、password（走独立改密接口）、
+ * userType / status（越权字段），不是漏了。
  */
 @Data
 public class UserProfileUpdateCommandDTO {

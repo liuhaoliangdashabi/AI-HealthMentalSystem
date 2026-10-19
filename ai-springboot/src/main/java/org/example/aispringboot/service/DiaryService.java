@@ -190,7 +190,7 @@ public class DiaryService {
                 .set(EmotionDiary::getEmotionTriggers,dto.getEmotionTriggers())
                 .set(EmotionDiary::getSleepQuality,dto.getSleepQuality())
                 .set(EmotionDiary::getStressLevel,dto.getStressLevel())
-                //★ 正文变了，旧的分析结果就过期了，必须清掉。
+                //正文变了，旧的分析结果就过期了，必须清掉
                 //  不清的话用户改完日记，详情里还是改之前那套情绪结论 —— 比"没有"更误导人。
                 //  AI 分析结果是"输入的函数"，输入变了输出就得作废，这叫「派生数据失效」。
                 .set(EmotionDiary::getAiEmotionAnalysis,null)
@@ -205,14 +205,7 @@ public class DiaryService {
         queueService.enqueueDiaryAnalysis(diaryId);
     }
 
-    /**
-     * 手动触发（或补算）一篇日记的 AI 分析。
-     *
-     * <p>为什么要单独开一个口子：自动分析是「写日记时投递」的，
-     * 所以<b>功能上线之前就存在的老日记永远不会被分析</b>。这个方法是给它们补账的。
-     *
-     * <p>幂等靠「已有结果就跳过」实现 —— 用户连点十下，也只会投递一次。
-     */
+    /** 手动触发或补算一篇日记的 AI 分析。自动分析只覆盖上线后新写的日记，老日记靠这里补账。幂等：已有结果就跳过。 */
     public void requestDiaryAnalysis(Long diaryId, Long userId, boolean isAdmin){
         EmotionDiary diary=emotionDiaryMapper.selectById(diaryId);
         if(diary==null){
@@ -251,12 +244,7 @@ public class DiaryService {
         }
     }
 
-    /**
-     * 个人主页贡献日历：最近 days 天每天一条记录（同一天多篇只取最新那篇的心情）。
-     *
-     * 注意这里刻意只 select 三列 —— 90 天的日记正文加起来能有几百 KB，
-     * 而日历只需要一个颜色，全查出来是纯浪费。
-     */
+    /** 个人主页贡献日历：最近 days 天每天一条记录。只 select 三列，日历只要颜色，正文不用查。 */
     public List<UserActivityItem> listRecentActivity(Long userId, int days){
         if(userId==null)return List.of();
         int span=Math.max(1,days);

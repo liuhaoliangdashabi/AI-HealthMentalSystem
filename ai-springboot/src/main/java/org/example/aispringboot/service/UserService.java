@@ -148,23 +148,9 @@ public class UserService {
     }
 
     /**
-     * 按 ID 查用户 —— 全站最高频的一次查询。
-     *
-     * <p>谁在调它：{@code JwtAuthticationFilter:78}，也就是<b>每一个带 token 的请求</b>。
-     * 也就是说只要用户在页面上点一下，后端就要 select 一次 user 表。而 user 表是典型的
-     * 「读极多、写极少」——一个月可能就改一次昵称。这种数据不进缓存纯属浪费。
-     *
-     * <p><b>为什么缓存 DTO 而不是 entity：</b>
-     * entity 里有 {@code password}（bcrypt 哈希），进了 Redis 就等于把密码哈希抄了一份到缓存里。
-     * {@code UserDetailResponseDTO} 没有这个字段，缓存的拷贝天然是脱敏的。
-     *
-     * <p><b>为什么可以缓存"已转成完整 URL 的 avatar"：</b>
-     * 这里返回的 avatar 是 {@code OSSUtil.getUrl(objectKey)} 的结果。缓存住它意味着
-     * OSS 域名一变更，缓存里的老域名要等 TTL（30 分钟）过期才纠正。这个代价可以接受，
-     * 因为域名变更是一次性运维动作，不是业务行为。
-     *
-     * <p><b>⚠️ 所有写 user 表的方法都必须 {@code @CacheEvict}，否则用户会看到 30 分钟前的自己。</b>
-     * 见 {@code updateProfile} / {@code updateAvatar}。
+     * 按 ID 查用户，全站最高频的一次查询，JwtAuthticationFilter 每个带 token 的请求都会调。
+     * 缓存 DTO 而不是 entity，避免 password 哈希进 Redis；avatar 缓存的是完整 URL，域名变更要等 TTL 过期。
+     * 所有写 user 表的方法都必须 @CacheEvict，否则用户会看到 30 分钟前的自己。
      */
     @Cacheable(cacheNames = "user", key = "#userId")
     public UserLoginResponseDTO.UserDetailResponseDTO getUserById(Long userId){

@@ -7,9 +7,7 @@ import org.example.aispringboot.enumClass.UserStatus;
 
 import java.time.LocalDateTime;
 
-/**
- * 用户模块的转换方法：注册、登录、用户详情。
- */
+/** 用户模块的转换方法：注册、登录、用户详情。 */
 public class UserConvert {
 
     /**

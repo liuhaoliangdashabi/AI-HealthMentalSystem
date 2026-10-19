@@ -111,7 +111,6 @@
                             </ul>
                         </div>
                     </div>
-                    
                 </div>
                 <div class="detail-section">
                     <h4>时间信息</h4>
@@ -256,8 +255,7 @@ const viewSessionDetail=(row)=>{
         aiData.value=JSON.parse(row.aiEmotionAnalysis)
     }else{
         aiData.value={}
-        //★ 打开就自动补算，不用用户点按钮。
-        //  后端有 60 秒防重锁 + "已有结果就跳过"，多开几次也只会真跑一次。
+        //打开就自动补算，不用用户点按钮。后端有 60 秒防重锁和"已有结果就跳过"，多开几次也只会真跑一次
         triggerAnalyze(true)
     }
     detailDialogVisible.value=true
@@ -338,12 +336,10 @@ onUnmounted(()=>{
         margin: 0;   //父级 h4 自带 margin-bottom，这里要清掉，否则标题和按钮不在一条线上
       }
     }
-    
     h4 {
       margin: 0 0 16px 0;
       color: #303133;
       font-size: 16px;
-      
       i {
         margin-right: 8px;
         color: #409eff;
@@ -356,12 +352,10 @@ onUnmounted(()=>{
 .ai-analysis-status {
   .ai-status-tag {
     margin-bottom: 4px;
-    
     i {
       margin-right: 4px;
     }
   }
-  
   .ai-analysis-preview {
     font-size: 11px;
     color: #909399;
@@ -378,32 +372,27 @@ onUnmounted(()=>{
     padding: 12px;
     background-color: #f8f9fa;
     border-radius: 4px;
-    
     h5 {
       margin: 0 0 8px 0;
       color: #606266;
       font-size: 14px;
       font-weight: 600;
-      
       i {
         margin-right: 6px;
         color: #909399;
       }
     }
   }
-  
   .keywords-container {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-    
     .keyword-tag {
       background-color: #e1f3d8;
       color: #67c23a;
       border-color: #b3d8a4;
     }
   }
-  
   .suggestion-content,
   .risk-content {
     line-height: 1.6;
@@ -413,34 +402,28 @@ onUnmounted(()=>{
     border-radius: 4px;
     border: 1px solid #ebeef5;
   }
-  
   .improvement-list {
     margin: 0;
     padding-left: 20px;
-    
     li {
       margin-bottom: 4px;
       color: #606266;
       line-height: 1.5;
     }
   }
-  
   .ai-analysis-meta {
     margin-top: 16px;
     padding-top: 12px;
     border-top: 1px solid #ebeef5;
-    
     .analysis-time {
       margin: 0;
       font-size: 12px;
       color: #909399;
-      
       i {
         margin-right: 4px;
       }
     }
   }
-  
   .el-progress {
     .el-progress__text {
       font-size: 12px !important;

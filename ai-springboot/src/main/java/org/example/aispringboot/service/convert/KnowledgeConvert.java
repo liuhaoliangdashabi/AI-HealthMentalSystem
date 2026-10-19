@@ -9,9 +9,7 @@ import org.example.aispringboot.enumClass.ArticleStatus;
 
 import java.time.LocalDateTime;
 
-/**
- * 知识库模块的转换方法：分类、文章。
- */
+/** 知识库模块的转换方法：分类、文章。 */
 public class KnowledgeConvert {
 
     public static CategoryResponseDTO categoryToResponse(KnowledgeCategory c){

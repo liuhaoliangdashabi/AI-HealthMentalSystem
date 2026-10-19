@@ -22,9 +22,7 @@ public enum TaskStatus {
         this.description = description;
     }
 
-    /**
-     * 根据代码获取枚举
-     */
+    /** 根据代码获取枚举 */
     public static TaskStatus fromCode(String code) {
         for (TaskStatus status : TaskStatus.values()) {
             if (status.getCode().equals(code)) {
@@ -34,9 +32,7 @@ public enum TaskStatus {
         throw new IllegalArgumentException("未知的任务状态: " + code);
     }
 
-    /**
-     * 验证任务状态代码是否有效
-     */
+    /** 验证任务状态代码是否有效 */
     public static boolean isValidCode(String code) {
         for (TaskStatus status : TaskStatus.values()) {
             if (status.getCode().equals(code)) {

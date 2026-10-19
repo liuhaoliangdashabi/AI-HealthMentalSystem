@@ -67,7 +67,7 @@ public class KnowledgeArticleService {
     public IPage<ArticleResponseDTO> selectPage(ArticlePageQueryDTO query,
                                                 UserLoginResponseDTO.UserDetailResponseDTO user) {
         boolean isAdmin= UserType.ADMIN.getCode().equals(user.getUserType());
-        //AB端按前端传的 status 过滤；C端【强制】只看已发布 —— 不管前端传什么，防止自己拼参数绕过
+        //AB端按前端传的 status 过滤；C端强制只看已发布，不管前端传什么，防止自己拼参数绕过
         Integer scopedStatus=isAdmin?query.getStatus():ArticleStatus.PUBLISHED.getCode();
 
         Page<KnowledgeArticle> page=new Page<>(query.getCurrentPage(),query.getSize());
@@ -92,7 +92,7 @@ public class KnowledgeArticleService {
                 if(asc)qw.orderByAsc(KnowledgeArticle::getPublishedAt);
                 else   qw.orderByDesc(KnowledgeArticle::getPublishedAt);
             }
-            //★ 空串 = 前端没传排序字段，走默认排序，不能当"非法值"处理。
+            //空串表示前端没传排序字段，走默认排序，不能当非法值处理
             //  管理端「知识文章」列表压根不传 sortField，之前直接落到 default 抛
             //  「不支持的排序字段」，整个列表页打不开 —— 把"没传"和"传错了"混为一谈。
             case ""->{
@@ -119,7 +119,7 @@ public class KnowledgeArticleService {
 
     @CacheEvict(cacheNames = "article", key = "#articleId")
     public void putArticleStatus(String articleId, ArticleStatusCommandDTO status){
-        //★ 之前完全不校验 —— 前端传个 99 也会原样写进库。
+        //之前完全不校验，前端传个 99 也会原样写进库
         //  正好把一直没人调用的 ArticleStatus.isValidCode 用上
         if(!ArticleStatus.isValidCode(status.getStatus())){
             log.warn("文章{}要改成非法状态：{}",articleId,status.getStatus());
@@ -195,17 +195,9 @@ public class KnowledgeArticleService {
     }
 
     /**
-     * 推荐阅读：7 天热度榜优先，不足 TOP 条时用最新发布的文章补齐。
-     *
-     * <p><b>为什么必须补齐：</b>热度榜是「有人读过才进榜」的。
-     * 一个刚部署、或者当天没人访问的系统，榜里可能只有 1 条甚至 0 条 ——
-     * 前端那一栏就直接空着，看起来像功能坏了。而用户对"推荐"的预期是<b>永远有东西可点</b>。
-     *
-     * <p>补齐用的是"最新发布"，不是"随机"：榜单里的是"最近热门"，补进来的是"最近新文"，
-     * 两者对用户都有意义，且顺序上热门永远在前。
-     *
-     * <p><b>Redis 挂了也走补齐分支</b> —— 推荐位是首页门面，宁可退化成"最新文章列表"，
-     * 也不能因为缓存故障就整块消失。
+     * 推荐阅读：7 天热度榜优先，不足时用最新发布的文章补齐。
+     * 热度榜只有被读过的文章才进榜，新部署或当天无人访问时榜可能是空的，所以必须补齐。
+     * Redis 挂了也走补齐分支，推荐位是首页门面，宁可退化成最新列表也不能整块消失。
      */
     public List<ArticleResponseDTO> getHotArticle() {
         //1. 取榜单 ID（Redis 异常 → 空列表，后面自然走补齐）

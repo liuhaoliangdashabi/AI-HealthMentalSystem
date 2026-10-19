@@ -34,7 +34,6 @@ const isCollapse=computed(()=>useAdminStore().isCollapse)
 const menuItems=computed(()=>router.options.routes[0].children.filter(item=>!item.meta?.hidden))
 
 const selectMenu=(key)=>{
-    console.log(key)
     const currentRoute=router.options.routes[0]
     router.push(`${currentRoute.path}/${key.index}`)
 }

@@ -70,7 +70,6 @@ const submitForm=async(formEl)=>{
                     }else{
                         router.push('/')
                     }
-                    
                 }
             }).catch((err)=>{
                 // 错误原因已由响应拦截器统一弹出，这里仅记录

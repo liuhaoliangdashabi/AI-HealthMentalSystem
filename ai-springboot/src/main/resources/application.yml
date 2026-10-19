@@ -4,8 +4,8 @@ spring:
       chat:
         options:
           model: deepseek-ai/DeepSeek-V3
-          #⚠️ 实测：加 tool-choice: required 会让模型【反复并发调用】工具
-          #   （6 条消息触发了 128 次工具调用），会造成死循环 + 刷爆 API 额度，所以不能用
+          #实测加 tool-choice: required 会让模型反复并发调用工具（6 条消息触发 128 次），
+          #造成死循环并刷爆 API 额度，所以不能用
           tool-calling:
             enabled: true
         completions-path: /v1/chat/completions

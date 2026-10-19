@@ -6,9 +6,7 @@ import org.example.aispringboot.entity.EmotionDiary;
 
 import java.time.LocalDateTime;
 
-/**
- * 情绪日记模块的转换方法。
- */
+/** 情绪日记模块的转换方法。 */
 public class DiaryConvert {
 
     public static EmotionDiary commandToEntity(DiaryCommandDTO commandDTO, Long userId) {

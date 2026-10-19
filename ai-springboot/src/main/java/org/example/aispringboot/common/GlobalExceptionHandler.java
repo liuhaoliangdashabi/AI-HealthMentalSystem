@@ -44,8 +44,8 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Result<?>> handleMethodArgumentNotValid(MethodArgumentNotValidException e){
         String message=e.getBindingResult().getFieldErrors().stream()
                 .map(fe -> fe.isBindingFailure()
-                        ? "参数 "+fe.getField()+" 格式不正确"    // 类型转换 → 天书，换人话
-                        : fe.getDefaultMessage())               // 校验注解 → 你写的，直接用
+                        ? "参数 "+fe.getField()+" 格式不正确"    //类型转换失败，返回人话
+                        : fe.getDefaultMessage())               //校验注解的 message，直接用
                 .collect(Collectors.joining(", "));
         log.warn("掉进了参数校验异常捕获:{}",message);
         return json(Result.error(ResultCode.PARAM_ERROR.getCode(),ResultCode.PARAM_ERROR.getMsg(),message));
@@ -126,11 +126,7 @@ public class GlobalExceptionHandler {
         return json(Result.error(ResultCode.TOKEN_INVALID.getCode(),ResultCode.TOKEN_INVALID.getMsg(),null));
     }
 
-    /**
-     * POJO 查询参数（@ModelAttribute 绑定）失败时抛的。
-     * 之前只 import 了没写 handler —— 一旦给查询 DTO 加上校验注解，就会掉进兜底变成 500。
-     * 注意 MethodArgumentNotValidException 是它的子类，所以上面那个更具体的 handler 优先。
-     */
+    //POJO 查询参数绑定失败时抛。MethodArgumentNotValidException 是它的子类，上面那个 handler 优先
     @ExceptionHandler(BindException.class)
     public ResponseEntity<Result<?>> handleBind(BindException e){
         String message=e.getBindingResult().getFieldErrors().stream()
@@ -142,11 +138,7 @@ public class GlobalExceptionHandler {
         return json(Result.error(ResultCode.PARAM_ERROR.getCode(),ResultCode.PARAM_ERROR.getMsg(),message));
     }
 
-    /**
-     * 上传文件超过 spring.servlet.multipart.max-file-size 时抛。
-     * 注意：它在请求进入 Controller 之前就抛了 —— OSSUtil 里那个 10MB 校验根本轮不到执行，
-     * 所以两边的上限必须配成一致（见 application.yml）。
-     */
+    //上传超限时抛。它在进 Controller 之前就抛了，OSSUtil 里的 10MB 校验轮不到执行，两边上限必须一致
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<Result<?>> handleMaxUploadSize(MaxUploadSizeExceededException e){
         log.warn("上传文件超过大小限制");
@@ -161,53 +153,36 @@ public class GlobalExceptionHandler {
         return json(Result.error(ResultCode.FILE_UPLOAD_FAILED.getCode(),"文件上传请求格式不正确",null));
     }
 
-    /**
-     * Content-Type 和服务端要的不一致。
-     * 典型：往 @RequestBody(JSON) 的接口发 form-data，或者往 multipart 接口发 JSON。
-     */
+    //Content-Type 和服务端要的不一致，比如往 JSON 接口发 form-data
     @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
     public ResponseEntity<Result<?>> handleMediaTypeNotSupported(HttpMediaTypeNotSupportedException e){
         log.warn("Content-Type 不支持：收到 {}，支持 {}",e.getContentType(),e.getSupportedMediaTypes());
         return json(Result.error(ResultCode.PARAM_INVALID.getCode(),"请求格式不支持，请检查 Content-Type",null));
     }
 
-    /**
-     * 非唯一键的完整性约束：外键、非空、字段超长、CHECK 约束等。
-     * （唯一键冲突被上面的 DuplicateKeyException 接走）
-     */
+    //非唯一键的完整性约束：外键、非空、字段超长等。唯一键冲突被上面的 DuplicateKeyException 接走
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<Result<?>> handleDataIntegrity(DataIntegrityViolationException e){
-        //★ 故意不打 e.getMessage() —— 它经常带着具体的字段值（外键值、超长内容），属于数据外泄
+        //不打 e.getMessage()，它经常带着具体的字段值，属于数据外泄
         log.warn("数据库完整性约束冲突，请检查外键 / 非空 / 字段长度限制");
         return json(Result.error(ResultCode.PARAM_ERROR.getCode(),"数据不符合约束，请检查后重试",null));
     }
 
-    /**
-     * 方法级权限校验失败（@PreAuthorize 等）抛的。
-     * 现在项目里还没加这类注解，属于预防性处理 —— 不加的话会掉进兜底，把 403 误报成 500。
-     * ★ 用 A0300 而不是 A0301 —— 前端把 A0301 当成"需要重新登录"，会把用户踢下线。
-     */
+    //方法级权限校验失败时抛。用 A0300 不用 A0301，前端把 A0301 当成需要重新登录，会把用户踢下线
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<Result<?>> handleAccessDenied(AccessDeniedException e){
         log.warn("权限不足：{}",e.getMessage());
         return json(Result.error(ResultCode.AUTHORIZED_ERROR.getCode(),"没有权限执行该操作",null));
     }
 
-    /**
-     * 客户端提前断开时抛的。
-     * SSE 流式响应期间，用户切会话/刷新/关标签页，服务端还在往一个已经断掉的连接里写，就会抛这个。
-     * 这是【正常现象】，不是服务端故障 —— 所以降成 warn 且不打堆栈，否则一刷屏就把真问题淹了。
-     */
+    //客户端提前断开时抛。SSE 流式响应期间用户切走就会触发，属正常现象，降成 warn 且不打堆栈
     @ExceptionHandler(AsyncRequestNotUsableException.class)
     public void handleClientDisconnected(AsyncRequestNotUsableException e){
         log.warn("客户端已断开，流式响应中止：{}",e.getMessage());
     }
 
-    /**
-     * 客户端中途断开时，写响应体有时【直接抛 IOException】，而不是被包成 AsyncRequestNotUsableException。
-     * 消息里的"主机中的软件中止了一个已建立的连接"是 Windows 的本地化文案，靠它判断不可靠，
-     * 所以这里统一降成 warn —— 但保留精简堆栈，万一真是别的 IO 问题还能看见。
-     */
+    //客户端断开时有时直接抛 IOException，而不是被包成 AsyncRequestNotUsableException。
+    //消息文案是系统本地化的，靠它判断不可靠，统一降成 warn，但保留精简堆栈
     @ExceptionHandler(IOException.class)
     public void handleIOException(IOException e){
         log.warn("响应写出失败（多半是客户端断开）：\n{}",briefStackTrace(e));
@@ -220,9 +195,7 @@ public class GlobalExceptionHandler {
     }
 
 
-    //==================================== 堆栈精简 ====================================
-    //e.printStackTrace() 动辄几百行，九成是框架内部调用，真正的出错点反而被埋了。
-    //这里只保留：异常名 + 消息 + 【我们自己的包】的调用帧 + Caused by 链。
+    //堆栈精简：只保留异常名、消息、本项目的调用帧和 Caused by 链，框架内部的几百行不打了
 
     private static final String APP_PACKAGE="org.example.aispringboot";
     private static final int MAX_CAUSE_DEPTH=5;   //最多跟几层 Caused by

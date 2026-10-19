@@ -113,11 +113,8 @@ public class UserController {
 
     /**
      * 手动触发一篇日记的 AI 分析。
-     *
-     * <p>存在的理由：自动分析是「写日记时投递」的，所以<b>上线前就存在的老日记永远不会有结果</b>。
-     * 这个接口就是给它们补算用的 —— 详情页看到"暂无分析"时点一下，几秒后刷新就有了。
-     *
-     * <p>幂等：已经有分析结果的直接返回，不会重复烧 AI 额度。
+     * 自动分析是写日记时投递的，上线前的老日记没有结果，这个接口给它们补算。
+     * 幂等：已有分析结果的直接返回，不会重复烧 AI 额度。
      */
     @PostMapping("/emotion-diary/{id}/analyze")
     public Result<Void> analyzeDiary(@PathVariable("id")Long diaryId,

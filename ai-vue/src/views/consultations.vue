@@ -97,7 +97,6 @@ const viewSessionDetail=(row)=>{
         sessionMessages.value=res
         sessionDetail.value=row
     })
-   
 }
 
 const handleChange=(page)=>{

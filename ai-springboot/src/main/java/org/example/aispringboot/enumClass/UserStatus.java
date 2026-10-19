@@ -16,9 +16,7 @@ public enum UserStatus {
         this.description = description;
     }
 
-    /**
-     * 根据代码获取枚举
-     */
+    /** 根据代码获取枚举 */
     public static UserStatus fromCode(Integer code) {
         for (UserStatus status : UserStatus.values()) {
             if (status.getCode().equals(code)) {

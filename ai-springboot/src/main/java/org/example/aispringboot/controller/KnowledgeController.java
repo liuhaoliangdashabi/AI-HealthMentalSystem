@@ -125,8 +125,6 @@ public class KnowledgeController {
         return Result.success(hotArticle);
     }
 
-
-
     //------------------------------------------Consultation相关
     //会话列表、会话消息已移到PsycholigicalChatController
 
@@ -167,8 +165,7 @@ public class KnowledgeController {
     }
 
     //-----------------------------------Data-analytics相关
-    //⚠️ 这三个接口必须锁管理端。看板里是全站数据（用户总数、日记数、情绪分布），
-    //   C 端用户能看就是数据泄露 —— 之前只校验了"登录"，没校验"是不是管理员"。
+    //这三个接口必须锁管理端。看板里是全站数据（用户总数、日记数、情绪分布），C 端能看就是数据泄露
     @PreAuthorize("hasRole('2')")
     @GetMapping("/data-analytics/overview")
     public Result<AnalyticsOverviewResponseDTO> analyticsOverview(

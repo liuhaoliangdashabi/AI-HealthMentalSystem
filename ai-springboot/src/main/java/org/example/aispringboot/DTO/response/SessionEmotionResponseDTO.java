@@ -34,14 +34,9 @@ public class SessionEmotionResponseDTO {
     private List<String> improvementSuggestions;
 
     /**
-     * 这条数据是不是「真的分析过」。
-     *
-     * <p>为什么必须有这个字段：没分析的时候其他字段都被 {@code normalize()} 填成了默认值
-     * （强度 50、风险 0、非负面），前端<b>光看数据分不出「默认值」和「模型真的判成中性 50」</b>。
-     * 于是轮询只能靠"值变没变"来判断，而默认值里 {@code primaryEmotion} 是 null，
-     * 第一次轮询就把 null 写进去 → 前端以为"变了" → 立刻停止轮询。
-     *
-     * <p>加了它，前端就能问一句「分析完了吗」，而不是猜。
+     * 这条数据是不是真的分析过。
+     * 没分析时其他字段被 normalize() 填成了默认值（强度 50、风险 0、非负面），前端光看数据分不出
+     * 默认值和模型真的判成中性 50。有了它前端可以直接问「分析完了吗」，不用靠值变没变来猜。
      */
     private Boolean analyzed;
 }

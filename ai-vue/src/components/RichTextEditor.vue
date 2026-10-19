@@ -178,33 +178,18 @@ const toolbarConfig = reactive({
 // 方法
 const handleEditorCreated = (editor) => {
   editorRef.value = editor
-  
-  // 初始化字数统计
   updateCharCount()
-  
-  // 调试信息 - 检查字体配置
-  console.log('编辑器实例:', editor)
-  console.log('工具栏配置:', editor.getConfig())
-  
-  // 检查字体菜单
-  const menus = editor.getAllMenuKeys()
-  console.log('所有可用菜单:', menus)
-  
-  if (menus.includes('fontFamily')) {
-    console.log('字体菜单已启用')
-  } else {
+
+  //字体菜单没启用时给个提示，方便排查工具栏配置
+  if (!editor.getAllMenuKeys().includes('fontFamily')) {
     console.warn('字体菜单未启用')
   }
-  
-  // 触发创建事件
+
   emit('created', editor)
-  
-  console.log('富文本编辑器已创建')
 }
 
 const handleEditorChange = (editor) => {
   updateCharCount()
-  
   // 触发变更事件
   emit('change', {
     html: editor.getHtml(),
@@ -214,16 +199,13 @@ const handleEditorChange = (editor) => {
 
 const handleEditorDestroyed = () => {
   editorRef.value = null
-  console.log('富文本编辑器已销毁')
 }
 
 const updateCharCount = () => {
   if (!editorRef.value) return
-  
   const text = editorRef.value.getText()
   const cleanText = text.replace(/\s+/g, ' ').trim()
   currentCharCount.value = cleanText === '' ? 0 : cleanText.length
-  
   // 检查字数限制
   if (currentCharCount.value > props.maxCharCount) {
     ElMessage.warning(`内容长度不能超过 ${props.maxCharCount} 字符`)
@@ -560,18 +542,15 @@ onBeforeUnmount(() => {
   :deep(.w-e-toolbar) {
     padding: 0.375rem;
   }
-  
   :deep(.w-e-toolbar .w-e-bar-item) {
     margin: 0 0.0625rem;
     height: 24px;
     min-width: 24px;
     font-size: 0.875rem;
   }
-  
   :deep(.w-e-text-container) {
     padding: 0.75rem;
   }
-  
   .editor-footer {
     padding: 0.375rem 0.75rem;
   }

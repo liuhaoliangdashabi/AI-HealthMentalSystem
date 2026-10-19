@@ -18,10 +18,7 @@ import reactor.core.publisher.Flux;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/**
- * AI 对话专用服务。
- * 注意：会话的【查询】不在这里 —— 那是 AB端/C端共用的，在 KnowledgeConsultationService。
- */
+/** AI 对话服务。会话查询不在这里，那是 AB 端和 C 端共用的，在 KnowledgeConsultationService。 */
 @Slf4j
 @Service
 public class PsychologicalSupportService {
@@ -118,7 +115,7 @@ public class PsychologicalSupportService {
                     })
                     .doOnComplete(()->{
                         String completeRes=fullResponse.toString();
-                        log.info("【AI】大模型流式响应结束：conversationId={},共{}字,耗时={}ms",
+                        log.info("[AI] 大模型流式响应结束：conversationId={},共{}字,耗时={}ms",
                                 conversationId,completeRes.length(),System.currentTimeMillis()-startTime);
                         //消息存储到表中
                         consultationMessageService.saveAiMessage(dbSessionId,completeRes,"openai");

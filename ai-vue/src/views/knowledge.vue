@@ -141,7 +141,6 @@ const handleDelete=(row)=>{
 
 onMounted(async()=>{
     const data=await categoryTree()
-    console.log(data,'分类树')
 
     categories.value=data.map(item=>{
         categoryMap[item.id]=item.categoryName
@@ -162,7 +161,6 @@ const pagination=reactive({
 
 
 const handleSearch=async (formData={})=>{
-    console.log("查询参数",formData)
     const params={
         ...pagination,
         ...formData

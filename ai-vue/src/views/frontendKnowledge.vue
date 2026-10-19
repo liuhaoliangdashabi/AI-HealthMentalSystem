@@ -58,7 +58,6 @@
                     />
                 </div>
             </div>
-            
         </div>
         <!-- 回到顶部：滚过 300px 才出现，一进页面就飘个按钮很碍眼 -->
         <transition name="back-top-fade">
@@ -127,8 +126,7 @@ const scrollToTop=()=>{
 
 onMounted(()=>{
     getPageList()
-    // 推荐阅读：改调「7 天热度榜」接口（后端 GET /knowledge/article/hot）
-    // ⚠️ 新接口返回【数组】，不再是分页对象 —— 所以直接取 res，没有 .records
+    //推荐阅读：调 7 天热度榜接口，返回的是数组不是分页对象，直接取 res
     getHotArticles().then(res=>{
         recommendList.value=res
     })

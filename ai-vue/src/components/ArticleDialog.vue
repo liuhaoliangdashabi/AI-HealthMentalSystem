@@ -110,7 +110,6 @@ watch(()=>props.article,(newVal)=>{
             businessId.value=newVal.id
             imgUrl.value=newVal.coverImageUrl||''
         })
-        
     }
 })
 const formData=reactive({
@@ -150,7 +149,6 @@ const commonTags = [
 ]
 const imgUrl=ref('')
 const beforeUpload=(file)=>{
-    console.log(file)
     const isImage=file.type.startsWith('image/')
     if(!isImage){
         ElMessage.error('上传图片,请选择图片文件')
@@ -167,9 +165,8 @@ const handleUploadRequest=async({file})=>{//解构回调参数中的file
     //UUID生成
     businessId.value=crypto.randomUUID()
     const fileRes=await uploadFile(file,{
-        businessId:businessId.value      //★ 必须 .value，传 ref 对象会被 FormData 变成 "[object Object]"
+        businessId:businessId.value      //必须 .value，传 ref 对象会被 FormData 变成 "[object Object]"
     })
-    console.log(fileRes)
     //预览用后端返回的完整 URL；入库的仍然是相对路径
     imgUrl.value=fileRes.fileUrl||''
     formData.coverImage=fileRes.filePath
@@ -201,14 +198,11 @@ const loading=ref(false)
 const handleSubmit=()=>{
     if(!formRef.value) return
     formRef.value.validate((valid,fields)=>{
-        //★ 校验不通过必须【直接返回】。原来只是 if(valid) 里设个 loading，
-        //  下面的提交代码在 if 外面，导致标题为空也会往后端发请求
-        //  （校验失败时 el-form 会把字段标红，本身就是提示）
+        //校验不通过直接返回，否则下面的提交代码在 if 外面，标题为空也会往后端发请求
         if(!valid){
             return
         }
         loading.value=true
-        console.log(formData,'formData')
         const submitData={...formData,tags:formData.tagArray.join(',')}
         submitData.id=businessId.value
         delete submitData.tagArray
@@ -227,7 +221,6 @@ const handleSubmit=()=>{
                 emit('success')
             })
         }
-        
     })
 }
 </script>

@@ -62,8 +62,6 @@ public class AiTaskConsumer {
                 );
         if(records==null)return;
         handleRecord(records);
-
-
     }
 
     @Scheduled(fixedDelay = 30000)
