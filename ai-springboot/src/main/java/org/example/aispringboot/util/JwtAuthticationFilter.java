@@ -14,6 +14,7 @@ import org.example.aispringboot.common.ResultCode;
 import org.example.aispringboot.config.SecurityConfig;
 import org.example.aispringboot.enumClass.UserStatus;
 import org.example.aispringboot.exception.BusinessException;
+import org.example.aispringboot.service.OnlineUserService;
 import org.example.aispringboot.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.Cacheable;
@@ -36,6 +37,8 @@ public class JwtAuthticationFilter extends OncePerRequestFilter {
     private JwtTokenUtil jwtTokenUtil;
     @Autowired
     private StringRedisTemplate redis;
+    @Autowired
+    private OnlineUserService onlineUserService;
 
     //确保每个请求只执行一次，不要在过滤器中反复打转
     @Override
@@ -113,6 +116,10 @@ public class JwtAuthticationFilter extends OncePerRequestFilter {
                     SecurityContextHolder.getContext().setAuthentication(authcation);
                     //7.token存储到请求的属性中——确保截取的token一定没问题了，再还回去
                     request.setAttribute("jwtToken",token);
+                    //8.在线心跳。放在认证之后 —— 没通过认证的请求不算"在线"，
+                    //  不然攻击者拿一堆废 token 刷接口，能把在线人数刷上天。
+                    //  touch 内部吞了所有异常，Redis 挂了也不会影响这次请求
+                    onlineUserService.touch(validationResult.getUserId());
                 }else{
                     log.warn("user数据或user状态有误：userId={}",user.getId());
                     clearSecurityContext();

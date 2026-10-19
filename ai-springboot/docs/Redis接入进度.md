@@ -2,7 +2,7 @@
 
 > **这是本项目的唯一进度文档。** 想知道「Redis 接得怎么样了、下一步干什么」，读这一篇就够了，不用翻别的文件，也不用重新扫代码。
 >
-> 更新日期：**2026-10-15**
+> 更新日期：**2026-10-19**
 >
 > `docs/` 下另外两篇（`DTO怎么写.md`、`事务练习-删除知识分类.md`）是**知识笔记**，不含进度信息。
 >
@@ -14,7 +14,25 @@
 
 ### 0.1 一句话状态
 
-**第 0 关 ✅、第 1 关（场景A 分类树 + 场景B 文章详情）✅、第 2 关（浏览量 `INCR` + 定时回写）✅、第 3 关（JWT 登出黑名单）✅、第 4 关（热门文章排行榜 ZSet）✅ —— 全部完成并实测验收。**
+**第 0 关 ✅、第 1 关（场景A 分类树 + 场景B 文章详情）✅、第 2 关（浏览量 `INCR` + 定时回写）✅、第 3 关（JWT 登出黑名单）✅、第 4 关（热门文章排行榜 ZSet）✅、第 5 关（限流 + 防重）✅、第 6 关（分布式锁）✅、第 7 关（高级数据结构 5 个场景）✅ —— 全部完成并实测验收。**
+
+**🎉 第 7 关场景 3（Stream 任务队列）2026-10-19 收官**，记录见**第十五节**。7 个场景至此全部落地：BitMap 签到、HyperLogLog UV、**Stream 任务队列**、文件秒传、AI 结果缓存。同节还包含**个人主页（13 周情绪日历 + 换头像）**、**管理端顶栏复用个人中心**、**情绪花园轮询刷新**、**会话时间 ISO 解析修复**。**只剩第 8 关面试包装。**
+
+**🔧 同日下午做了第 7 关「补全」（第十六节）**：扫出三处**每天都在跑却完全没进缓存**的热点 ——
+**① 用户信息缓存**（`JwtAuthticationFilter` 每请求查一次 user 表）、**② 数据看板缓存**（四张表 `selectList(null)` 全表扫描，独立 60 秒 TTL）、**③ 在线用户 ZSet**（score 存心跳时间戳，`ZREMRANGEBYSCORE` 清僵尸）。
+顺带修了两个问题：`/data-analytics/*` **C 端可访问的数据泄露**、`article:hot:7d` 把窗口天数写死在 key 里。
+
+**🐛 同日下午又修了四个线上问题（第十七节）**：
+**① 管理端文章列表「不支持的排序字段」**（`switch` 缺 `case ""`，把"没传"当"传错了"）；
+**② 日记详情的 AI 分析永远是默认值**（`emotion_diary.ai_emotion_analysis` 从来没被写过 —— 情绪花园和日记详情是**两套数据**，缓存的 key 是 `md5(对话原文)`，日记拼不出来）；
+**③ 推荐阅读只剩 1 条**（热度榜"有人读才进榜"，不足时没有补齐）；
+**④ 顶栏顺序**（`我的` 挪到 `知识库` 后面）。
+⚠️ **17.3 记了一个滚动升级陷阱**：旧消费者会把新类型的 Stream 消息当毒消息 ACK 丢弃，**升级必须先停旧实例**。
+
+**🔍 17.7 又挖出两个真凶**（情绪花园"永远显示中性 50"）：
+**① 模板里 `中性` / `50` 是写死的字面量**（没有插值，看起来像活组件）；
+**② 轮询判据用"值变没变"，而没分析完时后端返回 `primaryEmotion=null` → 第一轮就误判"变了" → 立刻停止轮询**。
+修法：DTO 加 `analyzed` 字段让后端**显式标记状态**，前端问"算完了吗"而不是猜。消费者调度 2000→800ms，B 端打开详情自动补算。
 
 **第 1 关欠的「兜底账」也已还清 ✅**（4 处代码 + 1 处配置，见 **9.4**）：手写流 4 处 try-catch、注解流 `CacheErrorHandler`、`timeout` 3000→500ms，全部落地。顺带把 **8.6-#7 的 `jti`** 也补了。
 
@@ -28,7 +46,7 @@
 **✅ 第 6 关（分布式锁）已完成**（2026-10-16，记录见**第十二节**）：`FileCleanupTask` 用 `SET NX EX` 抢锁 + Lua 原子释放（比对 uuid），多实例验收通过。
 📌 遗留：`LOCK_TTL = 30 秒` 与"任务最坏耗时"尚未对齐（见 **12.4**）。
 
-📅 **已登记待开发：用户日历模块**（仿 GitHub 贡献图，左右分栏）—— 用户明确要求**第 7 关完成 + 「手写流 → 注解流」改造完成后**开工。⚠️ 开工前必须先定"强度语义"，否则会选错数据结构，详见 **11.7**。
+📅 **用户日历模块已完成**（2026-10-19）—— 仿 GitHub 贡献图，左右分栏，落在 `ai-vue/src/views/profile.vue`。**强度语义已定**：一天只有一篇日记，次数恒为 1，所以**不用次数、改用 `moodScore`(1-10) 映射 5 档色阶**。窗口 13 周（≈3 个月），格子 32px。详见 **15.15**。
 
 **还剩几笔小账**（不急，见 8.6）：裸拼 SQL / 增量 key 无 TTL。
 
@@ -45,8 +63,8 @@
 | **第 4 关** | 热门文章排行榜（ZSet） | ✅ **完成**（2026-10-14，收官记录见**第十节**） |
 | **第 5 关** | 限流 + 防重复提交 | ✅ **完成**（2026-10-15，收官记录见**第十一节**）；⏭️ 注解流改造推迟到第 7 关后（见 11.6） |
 | **第 6 关** | 分布式锁 | ✅ **完成**（2026-10-16，收官记录见**第十二节**）；⚠️ TTL 与任务耗时待对齐（见 12.4） |
-| 第 7 关 | 高级数据结构 | 🔧 进行中（2026-10-16 起）；场景 1 BitMap 签到 ✅、**场景 2 HyperLogLog UV ✅（2026-10-17，见第十三节）**、**场景 4 文件秒传 ✅**、**场景 5 AI 结果缓存 ✅**（后两个见第十四节）、场景 3 Stream 任务队列 ⬜（明天单独打） |
-| 第 8 关 | 面试包装 | ⬜ 未开始 |
+| 第 7 关 | 高级数据结构 | ✅ **完成**（2026-10-19）：场景 1 BitMap 签到 ✅、场景 2 HyperLogLog UV ✅（第十三节）、**场景 3 Stream 任务队列 ✅（第十五节）**、场景 4 文件秒传 ✅、场景 5 AI 结果缓存 ✅（后两个见第十四节） |
+| 第 8 关 | 面试包装 | ⬜ 未开始（**下一步唯一任务**，抄 13.8 + 14.2~14.6 + 15.1~15.10） |
 
 > 第 1 关的「三大问题」已讨论完，**只有"穿透"落地了**（见 8.4）。
 
@@ -55,20 +73,33 @@
 | 文件 | 状态 |
 |---|---|
 | `config/RedisConfig.java` | ✅ `RedisTemplate<String,Object>`（JSON + `JavaTimeModule`） |
-| `config/CacheConfig.java` | ✅ `@EnableCaching` + `RedisCacheManager`（JSON 序列化 + TTL）+ **`implements CachingConfigurer` 自定义 `CacheErrorHandler`（注解流降级）** |
+| `config/CacheConfig.java` | ✅ `@EnableCaching` + `RedisCacheManager`（JSON 序列化 + TTL）+ **`implements CachingConfigurer` 自定义 `CacheErrorHandler`（注解流降级）**；✅ **第十六节：`withCacheConfiguration("analytics", 60s)` 按 cacheName 单独配 TTL** |
 | `service/KnowledgeCategoryService.java` | ✅ 场景A：`listAll` 手写 Cache Aside（**get / set 各自 try-catch 降级**）+ `evictCategoryTreeCache`（`try-catch` 降级）+ **`afterCommit` 钩子** |
 | `service/ArticleContentService.java` | ✅ 场景B：**拆出来的纯读 bean**，`loadDetail` 贴 `@Cacheable` |
-| `service/KnowledgeArticleService.java` | ✅ 三个写点贴 `@CacheEvict`；`getArticleDetail` 只做「取内容 → 权限 → 计数」，**计数两处已 try-catch 降级**；**第 4 关：`getArticleDetail` 里 `ZINCRBY` 日热度（+8 天 TTL）、`getHotArticle()` 读榜（只包 Redis 的兜底）、`complementArticleDTO` 共用补名字逻辑** |
+| `service/KnowledgeArticleService.java` | ✅ 三个写点贴 `@CacheEvict`；`getArticleDetail` 只做「取内容 → 权限 → 计数」，**计数两处已 try-catch 降级**；**第 4 关：`getArticleDetail` 里 `ZINCRBY` 日热度（+8 天 TTL）、`getHotArticle()` 读榜（只包 Redis 的兜底）、`complementArticleDTO` 共用补名字逻辑**；✅ **第十七节：`selectPage` 补 `case ""` 默认排序（原先空串直接抛「不支持的排序字段」）；`getHotArticle` 榜单不足 TOP 时用最新文章补齐，Redis 挂了也走补齐** |
 | `common/ArticleReadCountTask.java` | ✅ 第 2 关回写任务：`pop` 认领 + `getAndDelete` + 失败 `SADD` 放回；**第 4 关：`preheatArticleHot()` 每 30 秒 `ZUNIONSTORE` 预热 7 天榜（TTL 90 秒）** |
 | `common/FileCleanupTask.java` | ✅ **第 6 关：`SET NX EX` 抢锁（`lock:fileCleanup`，TTL 30 秒）+ `try/finally` 里 Lua 原子释放**（比对 uuid 才删）；⚠️ cron 是 **6 字段** `0 */20 * * * ?`，别写成 Quartz 的 7 字段 |
-| `controller/KnowledgeController.java` | ✅ 第 4 关：`GET /api/knowledge/article/hot` |
+| `controller/KnowledgeController.java` | ✅ 第 4 关：`GET /api/knowledge/article/hot`；✅ **第十六节：`/data-analytics/overview` 与 `/uv-trend` 补 `@PreAuthorize("hasRole('2')")`（原先 C 端可看全站数据）+ 新增 `GET /data-analytics/online`** |
 | `ai-vue/src/views/frontendKnowledge.vue` | ✅ 第 4 关：「推荐阅读」改调 `/knowledge/article/hot`（原先是 `sortField=readCount` 的**累计榜**） |
 | `ai-vue/src/api/frontend.js` | ✅ 第 4 关：新增 `getHotArticles()` |
-| `service/UserService.java` | ✅ 第 3 关：`logout(token)` 写黑名单（`StringRedisTemplate` + TTL=剩余有效期，**fail-closed**）；✅ **第 5 关：`login` / `register` 开头 `checkIpLimit(request)`，用户名维度 + IP 维度双滑动窗口，超限写 3 分钟黑名单** |
-| `service/DiaryService.java` | ✅ **第 5 关：`addEmotionDiary` 用 `SET NX` 防重**（`diary:dup:<userId>`，TTL 15 秒；⚠️ 成功后**不删**锁，等它自然过期） |
+| `service/UserService.java` | ✅ 第 3 关：`logout(token)` 写黑名单（`StringRedisTemplate` + TTL=剩余有效期，**fail-closed**）；✅ **第 5 关：`login` / `register` 开头 `checkIpLimit(request)`，用户名维度 + IP 维度双滑动窗口，超限写 3 分钟黑名单**；✅ **第十六节：`getUserById` 贴 `@Cacheable(cacheNames="user")`，`updateProfile` / `updateAvatar` 各贴 `@CacheEvict`** |
+| `service/AnalyticsService.java` | ✅ **第十六节：`getOverview()` 贴 `@Cacheable(cacheNames="analytics")`**（60 秒 TTL）；⚠️ 内部仍是四张表 `selectList(null)`，缓存只降频率不降单次成本 |
+| `service/OnlineUserService.java` | ✅ **第十六节新增：在线用户 ZSet**。`touch()` 写心跳（`ZADD online:users <now> <userId>`）、`count()` 先 `ZREMRANGEBYSCORE` 清 5 分钟僵尸再 `ZCARD`，**读失败返回 -1** |
+| `service/DiaryService.java` | ✅ **第 5 关：`addEmotionDiary` 用 `SET NX` 防重**（`diary:dup:<userId>`，TTL 15 秒；⚠️ 成功后**不删**锁，等它自然过期）；✅ **第十七节：新增/修改日记后 `enqueueDiaryAnalysis`，修改时先清空旧的 `ai_emotion_analysis`（派生数据失效）** |
 | `controller/UserController.java` | ✅ **第 5 关：`login` / `register` 方法签名补 `HttpServletRequest` 并透传给 Service** |
-| `util/JwtAuthticationFilter.java` | ✅ 第 3 关：黑名单校验（**fail-open**，Redis 挂则放行） |
+| `util/JwtAuthticationFilter.java` | ✅ 第 3 关：黑名单校验（**fail-open**，Redis 挂则放行）；✅ **第十六节：认证通过后 `onlineUserService.touch(userId)` 打在线心跳**（放在认证之后，废 token 刷不上去） |
 | `util/JwtTokenUtil.java` | ✅ `generateToken` 带 **`jti`**（`.withJWTId(UUID...)`）—— 同用户同秒登录不再签出相同 token |
+| `util/RedisKeys.java` | ✅ **key 收敛中心**（2026-10-19）：UV / Stream / AI 缓存前缀 / `article:hot:*` / `article:read:*` 全部集中。**新加 key 一律先进这里**，禁止散落字面量 |
+| `service/AiTaskQueueService.java` | ✅ **第 7 关场景 3 生产者**：`enqueueEmotionAnalysis()` → `XADD stream:ai:task`；try-catch 兜住，投递失败不影响用户回复；✅ **第十七节：新增 `enqueueDiaryAnalysis(diaryId)`，`type=DIARY_ANALYSIS`** |
+| `service/AiTaskConsumer.java` | ✅ **第 7 关场景 3 消费者**：`@PostConstruct` 建组（遍历 cause 链判 `BUSYGROUP`）→ `@Scheduled(2000)` `XREADGROUP >` 读新消息 → `@Scheduled(30000)` `XPENDING`+`XCLAIM` 兜底 → 超 3 次转死信 → `@Scheduled(cron)` `XTRIM ~1000`。`stats()` 给管理端。✅ **第十七节：`handleRecord` 按 `type` 分流，抽出 `readString`/`readLong`/`discardPoison`/`acknowledge`**；⚠️ 未知 `type` 会被当毒消息 ACK 丢弃 —— **升级必须先停旧实例**（见 17.3） |
+| `AiService/EmotionAnalysisService.java` | ✅ **已删 `@Async`**，`analyze()` 改返回 `boolean`（成功才 XACK）；缓存 key 引用 `RedisKeys.AI_EMOTION_CACHE_PREFIX`；✅ **第十七节：新增 `analyzeDiary(diaryId)`，结果写 `emotion_diary.ai_emotion_analysis`（存库不存 Redis，因为要长期可查）** |
+| `DTO/response/UserActivityItem.java` | ✅ 个人主页日历专用，只有 `diaryDate`/`moodScore`/`dominantEmotion` 三列 |
+| `DTO/command/UserProfileUpdateCommandDTO.java` | ✅ 资料修改入参，**刻意不含** `username`/`password`/`userType`/`status`（越权字段） |
+| `controller/UserController.java` | ✅ **新增 `GET /user/activity`（91 天）+ `PUT /user/avatar`（存 objectKey）+ `PUT /user/profile`（部分更新）**；✅ **第十七节：新增 `POST /emotion-diary/{id}/analyze`（老日记补算 AI 分析，幂等 + 越权校验）** |
+| `ai-vue/src/views/profile.vue` | ✅ **个人主页**：13 周情绪日历（按 `moodScore` 5 档配色）+ 头像上传（`AbortController` 可取消 + 本地预览）+ 三格统计 |
+| `ai-vue/src/components/Navbar.vue` | ✅ 管理端顶栏：动态头像 + 用户名 + 下拉「个人中心」 |
+| `ai-vue/src/stores/user.js` | ✅ **全局用户信息 store**：Navbar 和 profile 订阅同一个 ref，换头像/改资料后顶栏立刻变，不用刷新 |
+| `ai-vue/src/components/SideBar.vue` | ✅ 过滤 `meta.hidden`，个人中心不进侧边栏 |
 
 **Redis key 一览**
 
@@ -80,15 +111,34 @@
 | `article:read:dirty` | 第 2 关 | Set，待回写的 id |
 | `blacklist:token:<md5(token)>` | 第 3 关 | String，TTL = token **剩余**有效期；⚠️ key 必须 md5，**读写两边要一致** |
 | `article:hot:<yyyy-MM-dd>` | 第 4 关 | ZSet，当天热度；TTL **8 天**（自动滚出窗口）；⚠️ **冒号别漏**（`article:hot:` 不是 `article:hot`） |
-| `article:hot:7d` | 第 4 关 | ZSet，最近 7 天合并榜；定时任务每 30 秒重建，TTL **90 秒** |
+| `article:hot:7d` | 第 4 关 | ZSet，最近 7 天合并榜；定时任务每 30 秒重建，TTL **90 秒**；⚠️ key 里的 `7` 现在是**从 `ARTICLE_HOT_WINDOW_DAYS` 拼出来的**，改窗口只改那一个常量 |
+| `user::<userId>` | **第十六节** | 注解流缓存 `UserDetailResponseDTO`；TTL 30~40 分钟；⚠️ **写 user 表必须 `@CacheEvict`**，否则改昵称/换头像 30 分钟内看不到，封号也会延迟 30 分钟才生效 |
+| `analytics::overview` | **第十六节** | 注解流缓存数据看板；TTL **只有 60 秒**（`withCacheConfiguration` 单独配），不能沿用全局 30 分钟 |
+| `online:users` | **第十六节** | ZSet，member = `userId`，score = 最后活跃毫秒时间戳；超 **5 分钟**无请求算离线，`count()` 里 `ZREMRANGEBYSCORE` 清理；⚠️ 读失败返回 **-1**，不要和"真的没人(0)"混为一谈 |
 | `login:try:username:<username>` | 第 5 关 | ZSet 滑动窗口（member = `时间戳-UUID`，score = 时间戳）；60 秒内 > **10** 次 → 封 |
 | `login:ban:username:<username>` | 第 5 关 | String，用户名黑名单；TTL **3 分钟**；⚠️ 读和写都要拼 `<username>` 后缀 |
 | `login:try:ip:<ip>` | 第 5 关 | ZSet 滑动窗口；60 秒内 > **30** 次 → 封；⚠️ `login` 与 `register` **共用**这一个 key |
 | `login:ban:ip:<ip>` | 第 5 关 | String，IP 黑名单；TTL **3 分钟**；⚠️ 读和写都要拼 `<ip>` 后缀 |
+| `sign:<userId>:<yyyy-MM>` | 第 7 关场景 1 | **BitMap** 签到，`SETBIT dayOfMonth-1 1`；回读用 `BITCOUNT` + 逐位判断 |
+| `uv:<yyyy-MM-dd>` | 第 7 关场景 2 | **HyperLogLog**，`PFADD` 去重；TTL 40 天；⚠️ `size()` 可能返回 null，必须判空 |
+| `uv:empty:<yyyy-MM-dd>` | 第 7 关场景 2 | String，标记「这天查过库但结果是 0」，防缓存穿透 |
+| `file:md5:<md5>` | 第 7 关场景 4 | String，秒传映射（md5 → objectKey） |
+| `ai:emotion:analysis:<md5>` | 第 7 关场景 5 | String(JSON)，AI 情绪分析结果；TTL **1 小时**；⚠️ **这是前缀不是完整 key，末尾必须有冒号** |
+| `stream:ai:task` | 第 7 关场景 3 | **Stream**，AI 任务队列；消费者组 `ai-workers`；⚠️ **完整 key，末尾不加冒号**（加了会变成 `stream:ai:task:`，消费者组建在另一个 key 上，日志一切正常但消息永远不被消费 —— 第 8 次 key 事故）。**第十七节起承载两种任务**：`type=EMOTION_ANALYSIS`（带 `sessionId`）/ `type=DIARY_ANALYSIS`（带 `diaryId`）；⚠️ **老消息没有 `type` 字段，必须默认按 `EMOTION_ANALYSIS` 处理**，否则历史积压会被当毒消息清空 |
+| `stream:ai:task:dead` | 第 7 关场景 3 | **Stream**，死信；重试 3 次仍失败的任务，带 `originalId`/`deliveries`/`reason` |
 | `diary:dup:<userId>` | 第 5 关 | String（`SET NX` 防重锁）；TTL **15 秒**；⚠️ 成功提交后**不要** `delete`，等它自然过期 |
 | `lock:fileCleanup` | 第 6 关 | String，分布式锁（value = 本次执行的 UUID）；TTL **30 秒**；⚠️ 释放必须用 **Lua 比对 value** 再删，**别直接 `DEL`** |
 
 ### 0.4 下一步就做这个
+
+> **👉 当前唯一剩余任务：第 8 关「面试包装」。**
+> 素材已经齐了：**13.8**（UV 一页复盘）+ **14.2~14.6**（越权、秒传、AI 缓存）+ **15.1~15.10**（Stream 全链路）+ **16.1~16.4**（用户缓存、看板 TTL、在线 ZSet、越权）。
+> 输出格式：每个场景写成「**问题 → 方案 → 踩坑 → 收益**」四段，重点在「踩坑」—— 面试官问"你怎么知道该这么设计"，
+> 答案永远是"因为我先踩错了"。**别写成功能清单，要写成决策记录。**
+
+---
+
+**以下为历史记录，已完成，留作追溯。**
 
 **兜底账 ✅ 已还清**（2026-10-13 对着代码核对，非凭记忆）：
 
@@ -2085,4 +2135,1331 @@ if(emotionDiaryMapper.update(null,uw)==0){
 
 ---
 
-*本文档最后更新：2026-10-18。换电脑后：装 Redis（下 Release 不是 Source）→ 拉 `AI-mentalHealthSystem` → 读本文档第 0 节继续。*
+## 十五、第 7 关场景 3：Redis Stream 任务队列（2026-10-19）✅
+
+第 7 关最后一战。做完这一节，7 个场景全部收口。
+
+### 15.1 先问：`@Async` 到底差在哪
+
+原来的写法是 `EmotionAnalysisService.analyzeAsync()` 挂 `@Async`，AI 回复完就丢进线程池。
+
+看着能用，但有四个硬伤：
+
+| # | 缺陷 | 后果 |
+|---|---|---|
+| 1 | 任务在**进程内存**里 | 重启/发版，排队的任务直接蒸发，用户的情绪分析永远没了 |
+| 2 | 失败只打一条 `warn` | 大模型超时、限流，任务静默丢失，没有任何重试 |
+| 3 | 积压**不可见** | 线程池队列多深、堵了多少，只能靠猜 |
+| 4 | 多实例时任务锁在**单机堆**里 | 起了两个实例，各自有各自的队列，负载根本分不匀 |
+
+Stream 一次解决四个：**持久化、可重投、可观测、可多实例分担**。
+
+关键认知：**异步性从「方法级」挪到了「队列级」**。`analyze()` 上的 `@Async` 删掉之后用户也不会等，因为调它的不是 HTTP 线程，是 `@Scheduled` 的调度线程。
+
+### 15.2 Stream 和 List 的本质区别
+
+| | List（`LPUSH`/`RPOP`） | Stream（`XADD`/`XREADGROUP`） |
+|---|---|---|
+| 取走之后 | **消息消失** | **消息还在，只是被「签收」了** |
+| 消费失败 | 找不回来 | 留在 PEL 里，可以重新投递 |
+| 多消费者 | 谁抢到算谁的 | 消费者组保证**同一条只投给组内一个人** |
+
+一句话：**List 是「取走即消失」，Stream 是「取走要签收」。**
+
+### 15.3 PEL 是什么（这一节最容易搞混）
+
+**PEL = Pending Entries List，待确认列表。**
+
+它**不是消息副本**，是一个索引，每条只记四样东西：
+
+```
+消息ID | 被哪个消费者拿走了 | 最后一次投递时间 | 投递了几次
+```
+
+所以：
+
+- `XACK` **不会删消息**，只是把这条从 PEL 里划掉
+- `XLEN` **永远不会因为 ACK 变小**（只有 `XTRIM`/`XDEL` 才减）
+- 消息在 PEL 里 = 「Redis 认为你还没干完」
+
+这就是 **at-least-once（至少一次）** 的来源：Redis 不知道你处理成功没有，你不 `XACK`，它就当你没干完，早晚再投一次。所以业务必须**幂等**。
+
+### 15.4 消费者组：组名是逻辑身份，消费者名是实例身份
+
+```
+组名   ai-workers          ← 逻辑身份，永远不变，写在 RedisKeys 里
+消费者 work-<UUID>         ← 实例身份，每个进程一个，启动时生成
+```
+
+- **组名加时间戳 = 灾难**：每次重启产生一个新组，旧组里没 ACK 的消息变成孤儿，永远不会被重投
+- 消费者名必须每实例唯一，否则两个实例会互相覆盖对方的 PEL 记录
+
+### 15.5 生产者
+
+`AiTaskQueueService.enqueueEmotionAnalysis()`：
+
+```java
+redis.opsForStream().add(RedisKeys.AI_TASK_STREAM, Map.of(
+        "type","EMOTION_ANALYSIS",
+        "sessionId",String.valueOf(dbSessionId)));
+```
+
+**用 try-catch 包住，失败只打 error 不抛** —— 情绪分析是收尾动作，投递失败不能影响用户已经看到的 AI 回复。
+
+### 15.6 消费者启动：`@PostConstruct` 建组
+
+```java
+@PostConstruct
+public void init() {
+    try {
+        redis.opsForStream().createGroup(RedisKeys.AI_TASK_STREAM,
+                ReadOffset.from("0"), RedisKeys.AI_TASK_GROUP);
+    } catch (Exception e) {
+        boolean groupExists=false;
+        for (Throwable t=e; t!=null; t=t.getCause()) {
+            if (t.getMessage()!=null && t.getMessage().contains("BUSYGROUP")) {
+                groupExists=true; break;
+            }
+        }
+        if (!groupExists) log.error("创建消费者组失败，消费者可能无法工作", e);
+    }
+}
+```
+
+**三个点**
+
+1. **`@PostConstruct` 的时机**：依赖注入全部完成之后、Bean 对外提供服务之前，跑且只跑一次。放在构造器里不行 —— 那时 `@Autowired` 字段还是 null
+2. **`ReadOffset.from("0")` 不是 `lastConsumed()`**：`0` = 从最早开始，组刚建时如果 Stream 里已有积压，一条都不会漏；`lastConsumed()`（即 `$`）= 只读组创建之后的新消息，**建组前的积压会被永久跳过**
+3. **`BUSYGROUP` 在 `getCause()` 里，不在 `getMessage()`**：Spring 包了一层 `RedisSystemException`，`getMessage()` 只有 `"Error in execution"`。所以要遍历 cause 链，否则每次正常启动都会打一条假 error
+
+### 15.7 主循环：`consumeAiTask`
+
+```java
+@SuppressWarnings("unchecked")
+@Scheduled(fixedDelay=2000)
+public void consumeAiTask(){
+    List<MapRecord<String,Object,Object>> records=redis.opsForStream().read(
+            Consumer.from(RedisKeys.AI_TASK_GROUP, consumerName),
+            StreamReadOptions.empty().count(10),
+            StreamOffset.create(RedisKeys.AI_TASK_STREAM, ReadOffset.lastConsumed()));
+    if(records==null) return;
+    handleRecord(records);
+}
+```
+
+- **`@SuppressWarnings("unchecked")` 为什么是安全的**：`read(..., StreamOffset<K>...)` 是泛型可变参数，编译后是 `StreamOffset<K>[]`，Java 不能创建泛型数组 → 编译器建原始类型数组再强转 → heap pollution → unchecked 警告。这里传入的一定是 `StreamOffset<String>`，可以安全压制
+- **`>` 和 `0` 的区别**：`lastConsumed()` 对应 `>`，只读**新消息**，不读 PEL；`from("0")` 对应 `0`，只读**自己的 PEL**。所以「读新消息」和「重投 PEL」是两条完全独立的路径
+
+### 15.8 PEL 兜底：`cleanStaleTask`
+
+```java
+@Scheduled(fixedDelay = 30000)
+public void cleanStaleTask(){
+    PendingMessages pending=redis.opsForStream().pending(
+            RedisKeys.AI_TASK_STREAM, RedisKeys.AI_TASK_GROUP, Range.unbounded(), 10);
+    if(pending.isEmpty()) return;          // 无条件 new，不会返回 null
+
+    for(PendingMessage pm:pending){
+        long deliveries=pm.getTotalDeliveryCount();
+        Duration idle=pm.getElapsedTimeSinceLastDelivery();
+
+        // 分支 1：投太多次 → 死信 + ACK，停止重试
+        if(deliveries>=MAX_RETRY){
+            redis.opsForStream().add(RedisKeys.AI_TASK_DEAD_STREAM, Map.of(
+                    "originalId", pm.getIdAsString(),
+                    "deliveries", String.valueOf(deliveries),
+                    "reason","重试次数达上限"));
+            redis.opsForStream().acknowledge(RedisKeys.AI_TASK_STREAM, RedisKeys.AI_TASK_GROUP, pm.getId());
+            continue;
+        }
+        // 分支 2：还没到闲置阈值 → 下一轮再看
+        if(idle.compareTo(STALE_SECONDS)<=0) continue;
+
+        // 分支 3：闲置超时 → 抢过来自己重投
+        List<MapRecord<String,Object,Object>> claimed=redis.opsForStream().claim(
+                RedisKeys.AI_TASK_STREAM, RedisKeys.AI_TASK_GROUP,
+                consumerName, STALE_SECONDS, pm.getId());
+        if(claimed.isEmpty()) continue;     // 被别人抢先了
+        handleRecord(claimed);
+    }
+}
+```
+
+**为什么必须拆成三个互斥分支**
+
+「超次数」和「闲置超时」是**两种完全不同的动作**：前者要放弃（进死信），后者要重投。糊在一起写，就会出现「刚投一次就被判死刑」或者「投了一万次还在重投」。
+
+**`Range.unbounded()`** = `XPENDING key group - + count` 里的 `- +`，即「不限起止」。
+
+**`pending()` 两个重载别混**
+
+| 调用 | 返回 | 内容 |
+|---|---|---|
+| `pending(key, group)` | `PendingMessagesSummary` | 只有汇总（总条数、每个消费者的条数） |
+| `pending(key, group, range, count)` | `PendingMessages` | 逐条明细（ID、消费者、闲置时间、投递次数） |
+
+**Spring Data 3.5 没有 `XAUTOCLAIM`**，只能 `XPENDING` + `XCLAIM` 两步走。
+
+### 15.9 两条路径，一个 handler
+
+这是当时最容易绕晕的地方。记住一句话：**两个入口，一个处理函数**。
+
+```
+① consumeAiTask  →  XREADGROUP ... >      → 新消息      ┐
+                                                       ├→  handleRecord(records)
+② cleanStaleTask →  XPENDING + XCLAIM     → 卡住的消息   ┘
+```
+
+`handleRecord()` 里做的事：
+
+```java
+private void handleRecord(List<MapRecord<String,Object,Object>> records) {
+    for (MapRecord<String,Object,Object> record : records) {
+        Object raw = record.getValue().get("sessionId");
+        Long sessionId = null;
+        if (raw != null) {                      // get 可能返回 null
+            try {
+                sessionId = Long.parseLong(raw.toString());
+            } catch (NumberFormatException e) {
+                log.warn("sessionId 不是数字，源数据={}", raw);
+            }
+        }
+        if (sessionId == null) {
+            // 毒消息：格式坏的，重投一万次还是坏的，只能 ACK 丢弃
+            redis.opsForStream().acknowledge(..., record.getId());
+            continue;
+        }
+
+        boolean ok = false;
+        try {
+            ok = analysisService.analyze(sessionId);
+        } catch (Exception e) {
+            log.warn("处理任务失败，留给PEL兜底", e);
+        }
+        if (ok) {
+            redis.opsForStream().acknowledge(..., record.getId());   // 真成功才 ACK
+        }
+    }
+}
+```
+
+### 15.10 毒消息 vs 瞬时失败（这条决定了队列会不会堵死）
+
+| 类型 | 例子 | 处理方式 |
+|---|---|---|
+| **永久失败**（毒消息） | 字段缺失、`sessionId` 不是数字、会话不存在 | **必须 ACK 丢弃**。不 ACK 就永远卡在 PEL，占着名额还会被反复重投 |
+| **瞬时失败** | 网络抖动、大模型限流、DB 连接超时 | **不 ACK**，留给 `cleanStaleTask` 重投 |
+
+**`analyze()` 为什么返回 `boolean` 而不是 `void`**
+
+`void` 只能「调完就 ACK」，PEL 就变成了摆设 —— 分析失败了也照样签收，消息彻底丢失。返回 `boolean` 才有「真成功」这个信号，才能决定 ACK 还是留着重试。
+
+`analyze()` 的三个返回值点：
+
+| 位置 | 返回 | 含义 |
+|---|---|---|
+| `if(messages.isEmpty()) return true` | `true` | 空会话，没什么可分析的，算成功 |
+| `if(result==null) return false` | `false` | 模型没给出结构化结果，留给重试 |
+| 末尾 `return true` | `true` | 正常完成 |
+
+### 15.11 `XTRIM` 近似裁剪
+
+```java
+@Scheduled(cron = "0 0 */1 * * *")
+public void trimStream(){
+    Long removed=redis.opsForStream().trim(RedisKeys.AI_TASK_STREAM, 1000, true);  // true = 近似
+}
+```
+
+- Stream 底层是 **radix tree**，每个宏节点约 100 条
+- `MAXLEN ~ 1000`（近似）：按**节点边界**删，实际留 1000~1099 条，**几乎 O(1)**
+- `MAXLEN 1000`（精确）：逐条删，O(N)，Stream 长了会卡
+- 生产环境一律用近似
+
+**注意**：这个 trim 原来写在 `cleanStaleTask` 末尾，被 `if(pending.isEmpty())return;` 挡住了。PEL 空是常态（消息消费完就 ACK），所以 trim **几乎永不执行**。必须拆成独立的 `@Scheduled`。
+
+### 15.12 第 9 次 key 问题：`article:hot` 没收敛
+
+全局搜字面量发现这个 key 在两个文件里各写了一遍：
+
+| 文件 | 写法 |
+|---|---|
+| `KnowledgeArticleService:62` | `DAY_HOT_KEY="article:hot:"` |
+| `KnowledgeArticleService:194` | 硬编码 `"article:hot:7d"` |
+| `ArticleReadCountTask:66` | 硬编码 `"article:hot:" + LocalDate.now()...` |
+| `ArticleReadCountTask:69/70` | 硬编码 `"article:hot:7d"` ×2 |
+
+现在**值是碰巧一致的**，所以能跑。但哪天想把窗口从 7 天改成 14 天，只改了一处 —— 生产者往 `article:hot:14d` 写、消费者从 `article:hot:7d` 读，**日志一切正常，榜永远是空的**。
+
+这是第 5 关那个坑的翻版。收敛到 `RedisKeys`：
+
+```java
+public static final String ARTICLE_HOT_DAY_PREFIX="article:hot:";
+public static final String ARTICLE_HOT_WINDOW="article:hot:7d";
+public static final int ARTICLE_HOT_WINDOW_DAYS=7;
+public static final Duration ARTICLE_HOT_WINDOW_TTL=Duration.ofSeconds(90);
+public static final String ARTICLE_READ_DELTA_PREFIX="article:read:delta:";
+public static final String ARTICLE_READ_DIRTY="article:read:dirty";
+```
+
+**判据补一条**：除「两个以上文件都要拼」的 key 外，**前缀类 key 一律收敛**（漏冒号是静默错误，能跑但 `KEYS *` 搜不到）。
+
+### 15.13 监控接口 `GET /api/task-queue`
+
+```json
+{
+  "streamLength": 3,
+  "pending": 0,
+  "pendingPerConsumer": {},
+  "deadLetters": 0,
+  "consumer": "work-9942b868-2f7a-4fc0-b79a-74930ce69c1c"
+}
+```
+
+**`-1` 的语义（重要）**
+
+读失败时返回 `-1` 而不是 `0`：
+
+- `0` 条积压 = 健康
+- 读不到 = Redis 出问题了
+
+两个都填 0，等于**监控在撒谎**。真出事的时候看板一片绿，比没有看板更糟。
+
+**鉴权**：`@PreAuthorize("hasRole('2')")`。暴露的是队列内部结构（积压量、死信数），只给管理端看。C 端调返回 `A0300`。
+
+### 15.14 验收记录（2026-10-19 实测）
+
+**第一段：真实链路**
+
+| # | 步骤 | 结果 |
+|---|---|---|
+| 1 | 建 `session_45` → 发一句英文抱怨考试压力 | SSE 525 行，正常 `event:done` 收尾 |
+| 2 | `XLEN stream:ai:task` | `2 → 3`，新消息 `1792379449436-0`，`sessionId=45` ✅ |
+| 3 | 等 16 秒后 `XPENDING` | `0` ✅ |
+| 4 | `KEYS ai:emotion:analysis:*` | 2 个 key（43 旧 + 45 新）✅ |
+| 5 | `GET /session/session_45/emotion` | `焦虑 / 30 分 / isNegative=true / riskLevel=1` + 建议 + 治愈行动 ✅ |
+
+**第二段：PEL 兜底（用 ghost 消费者制造卡死消息）**
+
+手法：`XADD` 用显式毫秒 ID + `XREADGROUP GROUP ai-workers ghost COUNT 1 STREAMS key >`，两条连着执行，抢在 1 秒一轮的正常消费者前面。
+
+| # | 验证 | 结果 |
+|---|---|---|
+| 1 | claim 接管 | 消息归 ghost → 等 95 秒 → `PEL=0`，消费者变成 `work-xxx`。**关键推理**：消息归 ghost 时正常消费者用 `>` 永远读不到，PEL 归 0 只可能是 claim 干的 |
+| 2 | 死信 | ghost 读走 1 次 → `XCLAIM` 两次顶到 3 次 → 等 40 秒 → `stream:ai:task:dead` 出现 `reason=重试次数达上限, deliveries=3`，主队列 `PEL=0` ✅ |
+
+**第三段：接口鉴权与数据清理**
+
+| # | 用例 | 结果 |
+|---|---|---|
+| 1 | C 端 token 打 `/task-queue` | `A0300 没有权限执行该操作` ✅ |
+| 2 | 管理员 token 打 `/task-queue` | `200`，`streamLength=3 / pending=0 / deadLetters=0` ✅ |
+| 3 | 清理测试数据 | 删 1 条人工死信 + 3 条假任务（999999×2、888888），保留 43/44/45 三条真实任务 ✅ |
+
+### 15.15 个人主页（顺手做的前端收尾）
+
+**GitHub 风格贡献日历**，但**不用贡献次数当色阶** —— 一天只有一篇日记，次数恒为 1，全图一个色，没有信息量。
+
+改用 `moodScore`（1~10）映射 5 档：
+
+```js
+const LEVELS = ['#EBEDF0', '#C6E48B', '#7BC96F', '#239A3B', '#196127']
+// 无记录 / 1-3 / 4-6 / 7-8 / 9-10
+```
+
+**窗口从 52 周收窄到 13 周（≈3 个月）**，格子从 11px 放大到 32px —— 只显示三个月还用密排小格子，视觉上太空。
+
+**后端配套两个接口**
+
+| 接口 | 说明 |
+|---|---|
+| `GET /user/activity` | 返回最近 91 天，**只 select 三列**（`diaryDate`/`moodScore`/`dominantEmotion`）。90 天的日记正文加起来几百 KB，日历只要一个颜色，全查出来是纯浪费 |
+| `PUT /user/avatar` | 入参是 `objectKey` 不是完整 URL |
+
+**头像为什么要存 objectKey**
+
+`User.avatar` 以前存的是 objectKey，但 `UserConvert` 直接透传，前端 `<el-avatar :src>` 拿到相对路径 → 破图。
+
+修法是**出口统一收口**：
+
+```java
+private UserLoginResponseDTO.UserDetailResponseDTO toDetailResponse(User user){
+    UserLoginResponseDTO.UserDetailResponseDTO dto=UserConvert.entityToDetailResponse(user);
+    dto.setAvatar(ossUtil.getUrl(dto.getAvatar()));   // objectKey → 完整 URL
+    return dto;
+}
+```
+
+`login` / `getUserById` / `register` 三处全部走它。**`getUserById` 尤其关键** —— JWT filter 每个请求都调它，改这一处，所有 `@AuthenticationPrincipal` 拿到的 avatar 就都是完整 URL 了。
+
+存 objectKey 而不是 URL 的理由：OSS 域名/协议一变，库里几千条 URL 全废，objectKey 不会。
+
+**上传可打断**
+
+用 `AbortController` + axios `signal`：
+
+```js
+const ctrl = new AbortController()
+uploadCtrl.value = ctrl
+const res = await uploadFile(fd, ctrl.signal)
+```
+
+取消时 `ctrl.abort()`，axios 抛 `CanceledError`（`err.name === 'CanceledError'` 或 `err.code === 'ERR_CANCELED'`），跟真正的失败区分开。
+
+另外选中文件后立刻 `URL.createObjectURL(file)` 本地预览 —— 图还没传上去就能看出选没选错。
+
+**修改个人资料**
+
+左栏 `meta-list` 下面加「修改信息」按钮，点开 `el-dialog` 回显昵称/邮箱/手机/性别/生日。
+
+后端 `PUT /user/profile` → `UserService.updateProfile()`。
+
+**DTO 刻意不含这几个字段，不是漏了**：
+
+| 字段 | 为什么不能放进来 |
+|---|---|
+| `username` | 唯一键 + 登录凭据，改名等于换身份，要走独立的重名校验流程 |
+| `password` | 走独立的改密接口（要先验旧密码），不能跟资料混在一起 |
+| `userType` / `status` | **越权字段**，用户自己填了就能提权 / 给自己解封 |
+
+**部分更新语义（这里有个坑）**
+
+不能无脑 `set(字段, dto.get字段())` —— 前端只传 email 的话，昵称会被一起清成 null。
+
+正确写法：**`null` 表示「这次不改」，不 set**：
+
+```java
+LambdaUpdateWrapper<User> uw=new LambdaUpdateWrapper<User>()
+        .eq(User::getId,userId)
+        .set(User::getEmail,newEmail)              // 必填，一定更新
+        .set(User::getUpdatedAt,LocalDateTime.now());
+if(newNickname!=null) uw.set(User::getNickname,newNickname);
+if(newPhone!=null)    uw.set(User::getPhone,newPhone.isEmpty()?null:newPhone);
+if(dto.getGender()!=null)   uw.set(User::getGender,dto.getGender());
+if(dto.getBirthday()!=null) uw.set(User::getBirthday,dto.getBirthday());
+```
+
+那「清空手机号」怎么表达？**空串**。所以 `@Pattern` 要放宽成 `^$|^1[3-9]\d{9}$`，否则 `""` 会被判格式错误。
+
+不能用 `updateById`：它**会跳过 null 字段**，那样用户永远清不掉已经填过的手机号。
+
+**邮箱要单独查重**：`login` 里是 `eq(username) or eq(email)`，两个账号同邮箱就等于抢同一个登录入口。
+
+```java
+if(!newEmail.equalsIgnoreCase(user.getEmail())){
+    LambdaQueryWrapper<User> qw=new LambdaQueryWrapper<User>()
+            .eq(User::getEmail,newEmail)
+            .ne(User::getId,userId);          // 排除自己，否则不改邮箱也会报"已被占用"
+    if(userMapper.selectCount(qw)>0) throw new BusinessException("该邮箱已被其他账号使用");
+}
+```
+
+**前端两个细节**
+
+- 空手机号**不能 delete 掉**：删了就是「这次不改」，用户想清空就永远清不掉
+- 空生日**必须 delete 掉**：`LocalDate` 解析 `""` 直接报错，而 `null` 又表达不了「清空」，干脆不动
+
+**验收（2026-10-19，8081 临时实例实测，未污染 8080）**
+
+| # | 用例 | 结果 |
+|---|---|---|
+| 1 | 填手机号 `13800138000` | `200`，回读一致 ✅ |
+| 2 | 传 `phone:""` 清空 | `200`，回读 `null` ✅ |
+| 3 | 传 `phone:"123"` | `400 手机号格式不正确` ✅ |
+| 4 | 传 `birthday:"2030-01-01"` | `400 生日不能是未来日期` ✅ |
+| 5 | 邮箱改成 admin 的 | `6000 该邮箱已被其他账号使用` ✅ |
+| 6 | **只传 email** | 昵称/手机/性别全部保持不变 ✅ |
+
+**管理端复用同一个页面**
+
+- `router/index.js` 的 `/back` children 加 `{ path:'profile', meta:{ hidden:true } }`
+- `SideBar.vue` 过滤 `!item.meta?.hidden`，否则它会出现在侧边栏（且 `meta.icon` 是 undefined，`<component :is>` 会报错）
+- `Navbar.vue` 头像改成读全局 store（见下）
+
+**顶栏头像为什么不跟着变（以及怎么修）**
+
+Navbar 和 profile 各自 `ref({})` 存一份 userInfo，是**两份互不相干的副本**。在 profile 换完头像只更新了自己那份，Navbar 根本不知道，只能刷新页面才变。
+
+修法：建 `stores/user.js`（Pinia），`userInfo` 放进去，两边读同一个 ref：
+
+```js
+// stores/user.js
+const userInfo = ref({})
+const setUser = (patch) => {
+    userInfo.value = { ...userInfo.value, ...patch }
+    localStorage.setItem('userInfo', JSON.stringify(userInfo.value))
+}
+```
+
+```js
+// profile.vue —— 换完头像 / 改完资料
+userStore.setUser({ avatar: saved.avatar })
+
+// Navbar.vue —— 只读，自动跟着变
+const avatarUrl = computed(() => userStore.userInfo.avatar || '')
+```
+
+**这就是「回调」的正式做法**：不是让子组件通知父组件，而是让两边订阅同一份状态。谁写谁负责 `setUser`，谁读谁自动重渲染。事件总线（`window.dispatchEvent`）也能做，但只适合"发生了一件事"的广播；"共享一份数据"用 store 才对。
+
+顺带两个细节：
+
+- `load()` 里用 `loadingPromise` 去重 —— Navbar 和 profile 会在同一帧先后 mount、都调 `load()`，不共享 promise 的话每次进页面要多打一次 `/user/current`
+- 退出登录走 `userStore.clear()`，store 和 localStorage 一起清，否则同一会话里换账号登录会看到上一个人的头像
+
+### 15.16 情绪花园不刷新的根因
+
+现象：AI 回复完，左侧情绪花园不动，**必须点别的会话再切回来**才更新。
+
+根因有三层：
+
+1. **时机太早**：`onClose` 里立即查了一次，那时 Stream 消费者还没跑完，必然拿到旧值
+2. **6 秒可能不够**：`setTimeout(..., 6000)`，但消费者是 2 秒一轮 + 大模型调用 5~10 秒，经常超时
+3. **两次请求打架**：`onClose` 的立即请求和 6 秒后的请求无序返回，慢的覆盖快的
+
+改成**轮询 + 作废令牌**：
+
+```js
+let emotionTimer=null
+let emotionPollToken=0
+
+const refreshEmotionLater=()=>{
+    const sid=currentSession.value.sessionId
+    if(!sid||String(sid).startsWith('temp_')) return
+
+    stopEmotionPoll()
+    const token=++emotionPollToken
+    const base=emotionFingerprint(currentEmotion.value)   // primaryEmotion|emotionScore|riskLevel
+    let tries=0
+
+    const tick=()=>{
+        if(token!==emotionPollToken) return     // 切走/又发了一轮，自己作废
+        tries++
+        loadSessionEmotion(sid,()=>{
+            if(token!==emotionPollToken) return
+            if(emotionFingerprint(currentEmotion.value)!==base) return   // 变了就停
+            if(tries>=8) return                                          // 8 次没变，这次真没变化
+            emotionTimer=setTimeout(tick,1500)
+        })
+    }
+    emotionTimer=setTimeout(tick,1500)
+}
+```
+
+`emotionPollToken` 是关键：切换会话、新建会话、再发一轮消息时都 `++`，让上一轮轮询在下一个 tick 自己退出，**不会把旧会话的情绪写到新会话的花园里**。
+
+### 15.17 会话列表显示 `2026-10-19T09:02:29` 的原因
+
+`formatRelativeTime` 里：
+
+```js
+const date=new Date(String(timeStr).replace(/-/g,'/'))   // ← 这里
+```
+
+`2026-10-19T09:02:29` 经过 `replace(/-/g,'/')` 变成 `2026/10/19T09:02:29`，**`T` 还在** → `new Date()` 得到 `Invalid Date` → `isNaN` → `return timeStr`，原串就直接渲染出来了。
+
+`replace(/-/g,'/')` 这个土办法只对 `YYYY-MM-DD HH:mm:ss`（空格分隔）有效，遇到 ISO 8601 的 `T` 就废了。
+
+修法：
+
+```js
+let date=new Date(timeStr)                                    // 先按标准 ISO 解析
+if(isNaN(date.getTime())){
+    date=new Date(String(timeStr).replace('T',' ').replace(/-/g,'/'))   // 兜底老格式
+}
+if(isNaN(date.getTime())) return String(timeStr).replace('T',' ')
+```
+
+### 15.18 遗留
+
+| 优先级 | 项 | 说明 |
+|---|---|---|
+| 🟡 | 两个账号密码错误 | `admin/123456`、`快乐的苟分仔/123456` 都报「密码错误」，10-18 还能登。本次回归靠旧 JWT 绕过（`/tmp/ct.txt`，userId=10，roleType=1）+ 用 `JWT_SECRET` 现签管理员 token。**数据库里的 password 字段需要人工核对一次** |
+| 🟡 | 第 8 关面试包装 | 抄 13.8 + 14.2~14.6 + 15.1~15.10，整理成「问题—方案—踩坑—收益」四段式 |
+| ⬜ | 秒传回归 | 本轮未测（需要真实文件上传） |
+| ⬜ | 前端响应式细节 | `.emotion-name` 的 `padding: 0 75px` 让每行只放 4 个卡片，可改 `0 12px` + `min-width` |
+
+**Stream 这条线的安全防线现状**
+
+| 层 | 措施 | 状态 |
+|---|---|---|
+| 投递失败 | try-catch 兜住，不影响用户回复 | ✅ |
+| 重复消费 | `XACK` + `analyze()` 幂等（按 sessionId 覆盖写缓存） | ✅ |
+| 毒消息 | 解析失败立即 ACK 丢弃 | ✅ |
+| 卡死消息 | `XPENDING` + `XCLAIM` 兜底重投 | ✅ |
+| 无限重试 | `deliveries>=3` 转死信 | ✅ |
+| 流无限增长 | `XTRIM MAXLEN ~ 1000` 每小时 | ✅ |
+| 监控撒谎 | 读失败返回 `-1` 而非 `0` | ✅ |
+| 指标越权 | `@PreAuthorize("hasRole('2')")` | ✅ |
+
+---
+
+## 十六、第 7 关补全：三个漏网的缓存场景（2026-10-19 下午）
+
+前十五节把「Redis 能干什么」铺了一遍。但回头扫全站代码，还有三处**每天都在跑、却完全没进缓存**的热点。
+本节补上，外加两个顺手发现的安全问题。
+
+### 16.1 用户信息缓存：全站最高频的一次查询
+
+**问题定位**
+
+`util/JwtAuthticationFilter.java:78`：
+
+```java
+user = userService.getUserById(validationResult.getUserId());
+```
+
+这一行在**每一个带 token 的请求**里都会执行。用户在页面上点一下、切个页签，后端就要
+`select * from user where id = ?` 一次。而 user 表是标准的「读极多、写极少」—— 一个月可能就改一次昵称。
+
+**为什么之前一直没做**
+
+因为它藏在 Filter 里，不在任何一个 Service 的业务方法上。只翻 Service 代码永远发现不了，
+得顺着**请求入口**往里看。
+
+**做法**（`service/UserService.java`）
+
+```java
+@Cacheable(cacheNames = "user", key = "#userId")
+public UserDetailResponseDTO getUserById(Long userId){ ... }
+
+@CacheEvict(cacheNames = "user", key = "#userId")
+public UserDetailResponseDTO updateProfile(...){ ... }
+
+@CacheEvict(cacheNames = "user", key = "#userId")
+public String updateAvatar(...){ ... }
+```
+
+**三个必须想清楚的问题**
+
+**① 缓存 entity 还是 DTO？**
+
+缓存 DTO。因为 `User` 实体里有 `password`（bcrypt 哈希），进了 Redis 就等于把密码哈希
+又抄了一份到缓存里。`UserDetailResponseDTO` 没有这个字段，缓存的拷贝天然是脱敏的。
+
+> 这条规矩可以推广：**会被序列化到缓存 / 消息队列 / 日志里的对象，都不该带密码、密钥、身份证号。**
+
+**② avatar 存的是 objectKey，缓存的是 URL，会不会出问题？**
+
+`getUserById` 返回前已经做了 `ossUtil.getUrl(objectKey)`，所以缓存里躺的是完整 URL。
+代价是 OSS 域名一变更，缓存里的老域名要等 TTL（30 分钟）过期才纠正。
+接受它的理由：域名变更是**一次性运维动作**，不是业务行为，30 分钟过渡期可以忍。
+
+**③ 写操作不 evict 会怎样？—— 本节最重要的一条**
+
+如果只在 `getUserById` 加 `@Cacheable`，忘了给 `updateProfile` 加 `@CacheEvict`：
+
+1. 用户改昵称 → 数据库是新的，缓存是旧的
+2. 页面刷新 → `/user/current` 命中缓存 → **显示的还是旧昵称**
+3. 用户以为"保存失败"，再点一次，还是旧昵称
+4. 最诡异的是：**等 30 分钟 TTL 过期，它自己就好了**
+5. 你去查数据库，数据是对的；你去查接口，返回是错的 —— 两边都对不上，因为**第三份数据在 Redis 里**
+
+**更严重的是封号场景**：`JwtAuthticationFilter:86` 判断 `UserStatus.NORMAL` 用的是缓存里的 `status`。
+如果将来加了封号接口却忘了 evict，**被封的账号还能继续用 30 分钟**。
+这不是"显示不一致"，是"权限没生效"。
+
+所以定一条死规矩：**`userMapper.update/insert/delete` 出现的地方，必须同时有对应的 `@CacheEvict`。**
+
+现在全项目只有 3 处写 user 表：`register`（插入新 id，不需要）、`updateProfile`、`updateAvatar`，全部对上了。
+
+### 16.2 数据看板缓存：60 秒，不是 30 分钟
+
+**问题定位**
+
+`AnalyticsService.getOverview()` 里四张表全是 `selectList(null)`：
+
+```java
+List<User> users = userMapper.selectList(null);
+List<EmotionDiary> diaries = emotionDiaryMapper.selectList(null);
+List<ConsultationSession> sessions = consultationSessionMapper.selectList(null);
+List<ConsultationMessage> messages = consultationMessageMapper.selectList(null);
+```
+
+四张表**全表拉进 JVM**，再在内存里 stream 聚合。有人点开看板首页就烧一遍。
+
+**做法**
+
+```java
+@Cacheable(cacheNames = "analytics", key = "'overview'")
+public AnalyticsOverviewResponseDTO getOverview() { ... }
+```
+
+**关键：它不能沿用全局 TTL**
+
+全局是 `30 + random(10)` 分钟（第 1 关给文章详情配的）。但看板语义完全不同：
+
+| | 文章详情 | 数据看板 |
+|---|---|---|
+| 谁看 | 所有用户 | 管理员 |
+| 多久变一次 | 几乎不变 | 每分钟都在变 |
+| 能忍多旧 | 30 分钟无所谓 | 30 分钟 = 看起来像坏了 |
+
+所以在 `CacheConfig` 里给 `analytics` 单独配 60 秒：
+
+```java
+return RedisCacheManager.builder(factory)
+        .cacheDefaults(cfg)                                   // 全局 30~40 分钟
+        .withCacheConfiguration("analytics",
+                cfg.entryTtl(Duration.ofSeconds(60)))         // 看板 60 秒
+        .build();
+```
+
+> **教训：一个全局 TTL 套所有缓存，最后一定是「有的太短白回源、有的太长像 bug」。**
+> TTL 不是技术参数，是业务参数 —— 它回答的是"这份数据能容忍多旧"。
+
+**⚠️ 但缓存只是遮羞布**
+
+`selectList(null)` 的成本是 O(表行数)，缓存降低的是**调用频率**，不是**单次成本**。
+10 个管理员同时刷新，缓存救得了；但数据涨到 100 万行时，那"1 次"回源就能把接口拖死。
+
+真正的解法是让数据库做聚合：
+
+```sql
+SELECT DATE(created_at) d, COUNT(*) FROM emotion_diary GROUP BY d
+```
+
+现在表小所以这么写没炸，但这是**技术债**，不是设计。
+
+### 16.3 在线用户：ZSet 的第二种用法
+
+**先跟 UV 划清界限**（这两个特别容易混）
+
+| | UV（第十三节） | 在线用户（本节） |
+|---|---|---|
+| 回答的问题 | 今天来过多少人 | 此刻有多少人 |
+| 语义 | 累计去重 | 时间窗口内的快照 |
+| 数据结构 | HyperLogLog | ZSet |
+| 准确性 | 估算，误差 0.81% | 精确 |
+| 内存 | 12KB 封顶，跟人数无关 | 每人几十字节，跟人数成正比 |
+
+**为什么必须 ZSet，Set 不行**
+
+Set 只能回答"这个人在不在集合里"，回答不了"他多久没动静了"。
+而"在线"本质是**时间问题** —— 三小时前来过的人也算在线，那这个数字就没意义了。
+
+把最后活跃时间塞进 score，就能用一句话筛掉过期的人：
+
+```java
+redis.opsForZSet().removeRangeByScore(RedisKeys.ONLINE_USERS, 0, deadline);
+```
+
+> **score 不是"排序用的装饰"，它是 ZSet 能表达时间维度的唯一手段。**
+> 排行榜用它排序，在线用户用它过滤 —— 同一个结构，两种读法。
+
+**实现**（`service/OnlineUserService.java`）
+
+```java
+public void touch(Long userId) {
+    redis.opsForZSet().add(ONLINE_USERS, String.valueOf(userId), System.currentTimeMillis());
+}
+
+public long count() {
+    long deadline = System.currentTimeMillis() - ONLINE_TIMEOUT.toMillis();
+    redis.opsForZSet().removeRangeByScore(ONLINE_USERS, 0, deadline);   // 先清
+    Long n = redis.opsForZSet().zCard(ONLINE_USERS);                   // 再数
+    return n == null ? 0L : n;
+}
+```
+
+调用点在 `JwtAuthticationFilter`，**认证通过之后**：
+
+```java
+onlineUserService.touch(validationResult.getUserId());
+```
+
+放在认证之后的原因：没通过认证的请求不算"在线"，否则攻击者拿一堆废 token 刷接口就能把在线人数刷上天。
+
+**三个设计取舍**
+
+**① 异常必须吞掉。** 在线人数是锦上添花的指标，不能因为它把用户正常请求搞挂。
+打 `debug` 不打 `warn` —— Redis 抖一下会刷满日志，而这件事本来也不影响业务。
+
+**② 清理放在 `count()` 里，不做定时任务。** 这样返回的数字一定是"此刻"的，不依赖定时任务的周期。
+代价是每次统计多一次 Redis 往返，但看板本来就几十秒才刷一次。
+副作用：没人调 `count()` 时 ZSet 会留着历史 member —— 但 member 是 userId，同一个用户只占一个位置，
+最多积累到"注册用户总数"，不会无限膨胀。
+
+**③ 读失败返回 `-1`，不返回 `0`。** 跟 `/task-queue` 的约定保持一致：
+`0` = 真的一个人都没有，`-1` = 我不知道。
+两者混成一个值，监控就会在最需要它的时候撒谎 —— 真出故障时看板显示"0 人在线"，
+运维看到的是"深夜没人用"，而不是"Redis 挂了"。
+
+### 16.4 🔴 顺手修的两个问题
+
+**① `/data-analytics/overview` 和 `/uv-trend` 没有管理端鉴权**
+
+这两个接口暴露的是全站数据：用户总数、日记总数、情绪分布、咨询量。
+之前只校验了"登录"，**C 端用户登录后就能看**。已加 `@PreAuthorize("hasRole('2')")`。
+
+> 这跟 14.2 的越权是同一类问题：**「登录」不等于「有权」。**
+> 判断标准不是"他有没有 token"，而是"这个数据该不该给他看"。
+
+**② `article:hot:7d` 把窗口天数写死在 key 里**
+
+原来是：
+
+```java
+public static final String ARTICLE_HOT_WINDOW="article:hot:7d";
+public static final int ARTICLE_HOT_WINDOW_DAYS=7;
+```
+
+两个常量各写一个 `7`。哪天把窗口改成 14 天，key 还是 `article:hot:7d` —— 名字和内容对不上，排查时能绕死人。
+
+改成拼出来：
+
+```java
+public static final int ARTICLE_HOT_WINDOW_DAYS=7;
+public static final String ARTICLE_HOT_WINDOW="article:hot:"+ARTICLE_HOT_WINDOW_DAYS+"d";
+```
+
+> **注意顺序**：`static final` 按书写顺序初始化，被引用的常量必须写在前面，
+> 否则直接编译报错（`illegal forward reference`）。
+
+### 16.5 验收记录（2026-10-19 16:12，8081 临时实例实测）
+
+| # | 用例 | 结果 |
+|---|---|---|
+| 1 | `GET /user/current` 后 `KEYS user::*` | `user::10`，TTL=2099 秒 ✅ |
+| 2 | `PUT /user/profile` 改昵称 | 缓存 key **立刻消失**（evict 生效）✅ |
+| 3 | 再查一次 `/user/current` | 缓存重建，TTL=2099 ✅ |
+| 4 | admin 打 `/data-analytics/overview` | 200，`analytics::overview` TTL=**59** 秒 ✅ |
+| 5 | C 端打 `/data-analytics/overview` | `A0300 没有权限` ✅ |
+| 6 | C 端打 `/data-analytics/uv-trend` | `A0300 没有权限` ✅ |
+| 7 | 连打三个接口后 `ZRANGE online:users WITHSCORES` | 成员 `1`/`10`，score 每次都在变新 ✅ |
+| 8 | `GET /data-analytics/online` | `{"online":2}` ✅ |
+| 9 | 手动 `ZADD online:users <10分钟前> 999` | ZCARD=3 → 查询返回 2，且 ZSet 变回 2（僵尸被清）✅ |
+
+### 16.6 还剩下的（不是 Redis 问题，但值得知道）
+
+| 项 | 说明 |
+|---|---|
+| 🔴 会话列表捞全量消息 | `KnowledgeConsultationService:68` 用 `in(sessionIds)` 把一页所有会话的**全部消息**捞出来，只为了算条数和最后一条。一个会话 500 条、一页 10 个，就是 5000 行。正解是 `COUNT(*)` + `MAX(created_at)` 聚合，或把 `messageCount` / `lastMessage` 冗余到 session 表 |
+| 🟡 `user_favorite` 表零使用 | 实体和 Mapper 都在，没有任何 service 调用。收藏功能没做 —— 做的话是 Set 的天然场景（`SADD user:fav:<uid> <articleId>` + `SISMEMBER` 判重） |
+| 🟡 缓存预热 | 分类树是懒加载，第一个请求要查库 + 拼树。可以加 `ApplicationRunner` 启动时预热，但当前数据量下收益 < 100ms |
+| ⬜ 缓存击穿 | 热点文章过期瞬间并发回源。`@Cacheable(sync=true)` 能挡，但它和 `unless` 冲突（见 `ArticleContentService:31` 的注释）。当前并发量下不值得改 |
+
+---
+
+## 十七、四个线上问题排查（2026-10-19 下午 16:30）
+
+用户报的四个现象，逐个定位。**其中三个的根因都不是"代码写错了"，而是"两套数据没接上"或"边界值没考虑"**。
+
+### 17.1 排序字段：空串不是非法值
+
+**现象**：管理端「知识文章」列表一打开就弹「不支持的排序字段」，整个列表空白。
+
+**根因**：`KnowledgeArticleService.selectPage` 里
+
+```java
+String sortField=query.getSortField()==null?"":query.getSortField();
+switch(sortField){
+    case "readCount"->...
+    case "publishedAt"->...
+    default -> throw new BusinessException("不支持的排序字段");
+}
+```
+
+管理端列表页（`knowledge.vue:166`）压根不传 `sortField`，只有 `{currentPage, size, title, categoryId, status}`。
+于是 `sortField` 是空串，直接落到 `default` → 抛异常。
+
+**把「没传」和「传错了」混为一谈** —— 前者是正常调用，后者才是客户端的 bug，必须区别对待：
+
+```java
+case ""->{                       //没传 = 走默认排序
+    qw.orderByDesc(KnowledgeArticle::getPublishedAt);
+}
+default ->{                      //真传了不认识的字段，才该报错
+    throw new BusinessException("不支持的排序字段");
+}
+```
+
+> 这是 `switch` 相对 `if/else` 的一个典型陷阱：`if ("readCount".equals(x)) ... else if ("publishedAt".equals(x)) ...`
+> 最后那个 `else` 不写就什么都不做，空串自然安全；
+> 一旦改成 `switch` + `default: throw`，**空串就从"无害"变成了"致命"**。
+
+### 17.2 日记的 AI 分析为什么一直显示默认值
+
+**现象**：情绪日志详情里「AI情绪分析结果」永远是 `-` / `0%` / 未知风险等级，但情绪花园有数据。
+
+**根因：这是两套完全不同的数据，之前谁也没把它们接起来。**
+
+| | 情绪花园 | 日记详情 |
+|---|---|---|
+| 数据来源 | `consultation_session.last_emotion_analysis` + Redis | `emotion_diary.ai_emotion_analysis` |
+| 触发方式 | 每次 AI 对话结束投 Stream | **从来没有任何代码写这个字段** |
+| 分析对象 | 一整段聊天记录 | 一篇日记 |
+
+所以「我明明做了分析缓存，为什么读不到」的答案是：**读不到，不是没去读。**
+
+`EmotionAnalysisService.analyze()` 的缓存 key 是：
+
+```java
+String md5 = DigestUtils.md5DigestAsHex(conversation.getBytes(UTF_8));  // conversation = "用户：xxx\nAI： xxx"
+String key = "ai:emotion:analysis:" + md5;
+```
+
+日记详情手里只有一个 `diaryId` 和一段日记正文 —— 它拼不出「用户：… / AI：…」这种对话串，
+也就**算不出那个 md5**。**key 的设计决定了只有知道对话原文的人才能命中它。**
+
+> 这不是"缓存没用上"，是"这份缓存本来就不是给这个场景用的"。
+> 设计缓存 key 时，要先问一句：**谁会来读？他手里有什么？能不能拼出这个 key？**
+
+**修法：给日记单开一条分析链路，复用同一条 Stream**
+
+```
+写日记 / 改日记
+   └─→ AiTaskQueueService.enqueueDiaryAnalysis(diaryId)
+          └─→ XADD stream:ai:task {type:DIARY_ANALYSIS, diaryId:44}
+                 └─→ AiTaskConsumer.handleRecord 按 type 分流
+                        └─→ EmotionAnalysisService.analyzeDiary(44)
+                               └─→ 调模型 → UPDATE emotion_diary SET ai_emotion_analysis=...
+```
+
+**三个设计决定**
+
+**① 结果存数据库，不存 Redis**
+
+Redis 是「易失的、带 TTL 的加速层」，数据库字段是「持久的、可追溯的结果」。
+用户半年后翻回这篇日记，仍然该看到当时的分析 —— 这种东西不该住在 1 小时就过期的 key 里。
+所以这里的"缓存"就是那个字段本身：**有值就不再调模型**。
+
+**② 改日记时必须把旧分析清空**
+
+```java
+.set(EmotionDiary::getAiEmotionAnalysis, null)
+.set(EmotionDiary::getAiAnalysisUpdatedAt, null)
+```
+
+正文变了，旧结论就过期了。不清的话用户改完日记，详情里还是改之前那套情绪判断 —— **比"没有"更误导人**。
+这叫**派生数据失效**：AI 分析是「输入的函数」，输入变了，输出必须作废。
+
+**③ 老日记要能补算**
+
+自动分析是「写日记时投递」的，所以**功能上线之前写的日记永远不会有结果**。
+加了 `POST /emotion-diary/{id}/analyze`，详情页在「暂无分析」时显示一个「生成分析」按钮，
+点一下投递 + 轮询，算完自动填进弹窗。幂等靠「已有结果就跳过」实现，连点十下也只投一次。
+
+**验收**（日记 44，2026-10-18 那篇"阶段项目还没完成"）：
+
+```json
+{"primaryEmotion":"悲伤","emotionScore":10,"isNegative":true,"riskLevel":1,
+ "riskDescription":"用户表现出明显的失望和压力，但未提及自伤或自杀倾向。",
+ "improvementSuggestions":["尝试将项目分解成更小的任务…","睡前冥想…","与朋友聊聊…"]}
+```
+
+模型判「悲伤 / 强度 10 / 负面 / 风险等级 1」，跟日记里"好失望"完全对得上。
+
+### 17.3 🔴 滚动升级陷阱：旧消费者会把新类型的消息当毒消息丢掉
+
+这是本次改动带出来的**新风险**，必须记下来。
+
+`AiTaskConsumer.handleRecord` 里对未知 `type` 的处理是：
+
+```java
+default -> {
+    discardPoison(record, "未知任务类型 " + type);   //← ACK 丢弃
+    continue;
+}
+```
+
+单实例没问题。但**新旧版本同时在线时**：
+
+1. 新版本往 Stream 里投了一条 `{type:DIARY_ANALYSIS, diaryId:44}`
+2. 旧版本的消费者抢到了这条消息
+3. 旧代码只认 `sessionId` → 取不到 → 判定为毒消息 → **ACK 丢弃**
+4. 新版本再去读，消息已经没了 —— **任务静默消失，日记永远没有分析结果**
+
+**为什么不能简单改成"未知类型不 ACK"**：那样消息会永远卡在 PEL 里，
+旧实例会反复重投、反复失败，最后把 `deliveries` 顶到上限送进死信 —— 从"丢一条"变成"堵一条"。
+
+**正确的做法（按代价从低到高）**：
+
+| 方案 | 代价 | 适用 |
+|---|---|---|
+| **升级时先停旧实例，再起新实例** | 有短暂停机 | 本项目，够用 |
+| 按类型拆成不同的 Stream（`stream:ai:session` / `stream:ai:diary`） | 两套兜底逻辑 | 长期演进 |
+| 消息带 `schemaVersion`，消费者只处理 ≤ 自己版本的，其余留在 PEL | 要配套"孤儿消息"清理 | 大规模集群 |
+
+**本项目的结论**：保持一条 Stream（两种任务生命周期完全一样，拆两条就要维护两套 PEL 兜底），
+但**升级顺序必须写进部署规范**：`停旧 → 起新`。这条比代码本身更重要。
+
+### 17.4 推荐阅读为什么会空
+
+**现象**：C 端知识库「推荐阅读」只剩 1 条甚至空着。
+
+**根因：热度榜是「有人读过才进榜」的。**
+
+`article:hot:2026-10-19` 里只有 1 个成员 —— 因为今天只有一篇文章被读过。
+`getHotArticle()` 老老实实返回这 1 条，前端那一栏就只剩一条，看起来像坏了。
+
+而用户对「推荐」的预期是**永远有东西可点**。
+
+**修法：榜单不足 TOP 条时，用最新发布的文章补齐**
+
+```java
+// 榜单优先（保持热度顺序）
+ordered = hotIds → 查库 → 过滤已发布 → 按原顺序
+
+// 不足 10 条，用最新发布补（排除已在榜里的，别重复）
+if (ordered.size() < TOP) {
+    fill = selectList(status=PUBLISHED, id NOT IN 已有, order by publishedAt desc, limit 剩余)
+}
+```
+
+顺手把 **Redis 异常也接进补齐分支** —— 原来 `catch` 里直接 `return List.of()`，
+等于"缓存一挂，推荐位整块消失"。推荐位是首页门面，宁可退化成"最新文章列表"也不能空着。
+
+**验收**：1 条 → **6 条**（库里总共只有 6 篇已发布），热度第一的仍在最前。
+
+### 17.5 顺手的 UI 调整
+
+C 端顶栏导航顺序：`我的` 挪到 `知识库` 后面（`FrontendLayout.vue`）。
+内容型入口在前、个人中心在后，符合大多数站点的习惯。
+
+### 17.6 遗留：C 端聊天"半分钟没回显"
+
+代码是标准 Flux 流式（`PsychologicalSupportService:106` `.stream().content()`），
+并且 `doOnNext` 里已经埋了**首字耗时**日志：
+
+```java
+log.info("AI收到首个相应片段，首字耗时={}ms", System.currentTimeMillis()-startTime);
+```
+
+**下次复现时去 IDEA 控制台看这一行**：
+
+- 首字耗时 1~3 秒 → 后端没问题，是前端渲染/SSE 消费的问题
+- 首字耗时 > 10 秒 → 模型侧慢（网络/限流），跟代码无关
+- 压根没有这一行，只有 `流式对话失败` → 看 error 堆栈
+
+在没有这行日志之前，任何"优化"都是瞎猜。
+
+### 17.7 情绪花园"永远显示中性 50"的两个真凶
+
+用户的原话：「回显还是有问题，我想要的效果是让会话尽快结束的同时尽快让情绪分析显示在画面上，而不是点一下重新渲染的。」
+
+查下来是**两个独立的 bug 叠在一起**，每一个单独都能让"分析结果显示不出来"。
+
+#### 真凶一：模板里写死了「中性 / 50」
+
+`consultation.vue` 情绪花园的圆圈：
+
+```html
+<div class="emotion-name">中性</div>
+<div class="emotion-score">50</div>
+```
+
+**没有插值，没有绑定，就是两个字面量。**
+
+所以不管后端算出"焦虑 20"还是"愉悦 90"，画面上永远是"中性 50"。
+旁边那些"今天感觉：很不错"、"强度点"倒都是数据驱动的 —— 于是形成一种诡异的效果：
+**看起来这个组件是活的，唯独最关键的两个数字是死的**。
+
+```html
+<div class="emotion-name">
+    {{ emotionAnalyzing ? '分析中' : (currentEmotion.primaryEmotion || '中性') }}
+</div>
+<div class="emotion-score">
+    {{ emotionAnalyzing ? '…' : (currentEmotion.emotionScore ?? 50) }}
+</div>
+```
+
+> 教训：**改组件时一定要先确认"这个值到底从哪来"**。
+> 静态文案和绑定值在模板里长得几乎一样，肉眼扫过去很容易漏。
+
+#### 真凶二：轮询判据错了，第一轮就自己停
+
+原来的判据是"值变没变"：
+
+```js
+const base = emotionFingerprint(currentEmotion.value)   // "中性|50|0"
+const changed = emotionFingerprint(currentEmotion.value) !== base
+if (changed) return          // 变了就收工
+```
+
+问题在于**没分析完的时候后端返回什么**：
+
+```java
+// KnowledgeConsultationService.getSessionEmotion
+if (json == null || json.isBlank()) {
+    return normalize(SessionEmotionResponseDTO.builder().build());   // primaryEmotion = null
+}
+```
+
+`normalize()` 补了强度 50、风险 0、非负面，但**`primaryEmotion` 是 null**。
+前端 `{...currentEmotion.value, ...res}` 一合并，`primaryEmotion` 从 `'中性'` 变成 `null`：
+
+```
+第一轮：base = "中性|50|0"  →  实际 = "null|50|0"  →  判定"变了" → 停止轮询
+```
+
+**第一轮（1 秒后）就停了**，而这时候模型还在跑。用户只能手动点一下会话（触发 `loadSessionEmotion`）才看得到结果 —— 正好对上他说的"点一下重新渲染"。
+
+**修法：别猜，让后端直接说。**
+
+DTO 加一个字段：
+
+```java
+private Boolean analyzed;   // 这条数据是不是"真的分析过"
+```
+
+- 没结果 → `analyzed = false`
+- 有结果 → `analyzed = true`
+
+前端改成问"算完了吗"：
+
+```js
+loadSessionEmotion(sid, () => {
+    if (currentEmotion.value.analyzed) {   // 算完了，收工
+        emotionAnalyzing.value = false
+        return
+    }
+    if (tries >= 25) { ... }               // 25 秒还没好，放弃
+    emotionTimer = setTimeout(tick, 1000)
+})
+```
+
+> **这是本节最值得记的一条**：
+> **用"数据有没有变"来推断"任务有没有完成"，是一个不可靠的判据。**
+> 因为"没完成"也有值（默认值），"完成"也可能和默认值一样（真的判成中性）。
+> 唯一可靠的做法是让产出方**显式标记状态** —— 加一个 `analyzed`、`status`、`version` 字段，
+> 比前端猜一百次都强。
+
+#### 顺带：让等待可感知
+
+轮询期间显示「分析中 / 小暖正在读你的心情…」，而不是让用户盯着一个不动的"中性 50"发呆。
+**用户能忍 8 秒的 loading，忍不了 8 秒的"没反应"。**
+
+#### 顺带：消费者调度间隔 2000 → 800ms
+
+```java
+@Scheduled(fixedDelay = 800)
+public void consumeAiTask() { ... }
+```
+
+- 2000ms：任务平均等 1 秒才被捡起来
+- 100ms：每秒 10 次 `XREADGROUP` 空转，Redis 白烧
+- **800ms：平均等 0.4 秒，每秒 1.25 次空读**
+
+⚠️ 这只是「排队延迟」，不是「分析延迟」。**大头永远是模型调用的 5~10 秒**，
+调这个参数只能省 1 秒，别指望它把体验变"实时"。
+
+#### B 端：打开详情就自动补算
+
+`emotional.vue` 的 `viewSessionDetail` 里，没有分析结果时直接调 `triggerAnalyze(true)`（静默模式，不弹"已提交"）。
+后端有 60 秒防重锁（`SET NX diary:analyze:lock:<id>`）+ "已有结果就跳过"，
+多开几次也只会真跑一次。
+
+**顺带解决了一个隐藏问题**：表格数据是页面加载时的快照。
+数据库里后来写入了分析结果，但 `tableData` 里还是旧的 `null` ——
+现在轮询里会 `handleSearch()` 重新拉一次，1.2 秒后弹窗自己就填上了。
+
+#### 验收（8081 临时实例）
+
+| 用例 | 返回 |
+|---|---|
+| 未分析的会话（`session_49`） | `{"primaryEmotion":null,"emotionScore":50,"analyzed":false}` ✅ |
+| 已分析的会话（`session_46`） | `{"primaryEmotion":"愉悦","emotionScore":90,"analyzed":true}` ✅ |
+| 已分析的会话（`session_44`） | `{"primaryEmotion":"焦虑","emotionScore":20,"analyzed":true}` ✅ |
+
+---
+
+## 十八、第 8 关：面试包装（2026-10-19）✅
+
+**产出**：新建 `docs/Redis面试包装.md`（独立文档，本文档只留指针）。
+
+**为什么不写进本文档**：本文档 3200+ 行，是「过程记录 + 踩坑台账」，会一直增厚；
+面试包装是**交付物**，要反复打磨、要能直接投出去，混在台账里不好用。
+
+### 18.1 包装的核心策略（比内容更重要）
+
+面试官问「Redis 怎么用的」，他不是想听用了几个命令，他在判断三件事：
+**你是选型还是跟风**、**你有没有线上感**、**你有没有边界判断力**。
+
+所以整套包装的骨架是**按「问题类型」分类，而不是按「数据结构」分类**：
+
+| 类别 | 场景 | 共同点 |
+|---|---|---|
+| A 省数据库 | 分类树、用户信息、看板、AI 结果、文件秒传 | 读多写少，能容忍一定陈旧 |
+| B 省内存/算力 | UV（HLL） | 要的是一个数字，不需要精确到人 |
+| C 跨请求状态 | 限流、防重、黑名单、在线人数、分布式锁 | 进程内存放不下 / 多实例不共享 |
+| D 跨进程通信 | Stream 任务队列 | 进程内存靠不住，发版就蒸发 |
+| E 排序与排行榜 | 热门文章、浏览量回写 | 需要按分数排序 / 范围过滤 |
+
+> 这张表本身就是加分项 —— 它证明「我不是见到缓存就加，而是先判断问题属于哪一类」。
+
+### 18.2 文档结构（8 节）
+
+1. 先想清楚面试官在听什么（3 个判断维度）
+2. 简历怎么写（一行 / 三行 / 一段，三个版本）
+3. 30 秒项目介绍口播稿
+4. 13 个场景按 5 类分组 + 每类的面试点
+5. **五个必须讲深的场景**（四段式：问题—方案—踩坑—收益）
+   - 4.1 HLL 做 UV（最有料：0 的二义性、造不出空 HLL、两层门）
+   - 4.2 Stream 任务队列（最有深度：PEL、毒消息、滚动升级陷阱）
+   - 4.3 ZSet 做在线人数（最体现选型思考：为什么不是 Set、为什么不是 HLL）
+   - 4.4 ZSet 做 7 天滚动热榜（天级 key + ZUNIONSTORE）
+   - 4.5 缓存一致性（`@CacheEvict` 漏了的后果）
+6. **七条反常识认知**（`0` 是二义的 / 缓存不能做写路径准入 / 派生数据失效 / 用值变没变推断任务完成不可靠 / 返回 -1 不是 0 / 没传≠传错 / 登录≠有权）
+7. **高频追问 25 问**（10 个必须秒答 + 15 个可以想一想）
+8. **主动暴露的三个不足**（缓存预热 / 缓存击穿 / 会话列表捞全量）+ 5 分钟速记卡
+
+### 18.3 这一轮盘点出的新素材
+
+整理时发现两个之前没写进文档的点：
+
+**① 登录限流用的是 ZSet 滑动窗口，不是计数器**
+
+`UserService` 里 `opsForZSet().add(key, now+"-"+UUID, now)` +
+`removeRangeByScore(key, 0, now-60000)` + `zCard`。
+member 拼 UUID 是为了「同一毫秒多次失败不互相覆盖」。
+**固定窗口的临界问题**：59 秒打满 5 次、61 秒窗口重置又能打 5 次，2 秒内实际放行 10 次。
+这条在面试里比「我用了 ZSet」值钱得多。
+
+**② 数据结构使用清单（面试必问，必须准确）**
+
+| 结构 | 用在哪 |
+|---|---|
+| String | 缓存（user / analytics / ai:emotion / file:md5 / 分类树）、INCR 浏览量、黑名单、限流计数 |
+| Set | `article:read:dirty` 脏集合（待回写的文章 id） |
+| ZSet | 热门文章、在线用户、登录限流滑动窗口 |
+| **Bitmap** | **每日签到**（`SignService`：`setBit` 标记、`bitCount` 统计，一个月 31 天只占 4 字节） |
+| HyperLogLog | UV |
+| Stream | 任务队列 + 死信 |
+| **List / Hash** | **没用** —— 没有场景需要。面试被问「为什么不用」时，答「没有场景」比硬凑一个更有说服力 |
+
+**③ ⚠️ 签到功能里有个真 bug（整理时发现，待修）**
+
+`SignService.getSignStatus` 用 `StringRedisTemplate.opsForValue().get(key)` 读 Bitmap，
+拿回来的是 `StringRedisSerializer`（UTF-8）解码后的字符串，再 `getBytes(ISO_8859_1)` 还原字节。
+
+**问题是 Bitmap 的字节不是合法 UTF-8。** 实测：
+| 签到情况 | 字节 | UTF-8 解码 | 再编回 ISO_8859_1 | 结果 |
+|---|---|---|---|---|
+| 只签 day1 | `80` | `U+FFFD` | `3F`（`?`） | ❌ 判定未签到 |
+| day1~2 | `C0` | `U+FFFD` | `3F` | ❌ |
+| day1~7 | `FE` | `U+FFFD` | `3F` | ❌ |
+| 只签 day8（offset=7） | `01` | `\x01`（合法 ASCII） | `01` | ✅ |
+
+**只有落在「合法 ASCII 字节」位置的签到才读得对**（day 8/10~16/18~24…），
+day 1~7 必然读错。而 `total`（`bitCount`）是对的，因为它走了 `RedisCallback` 拿原始 `byte[]`，绕过了序列化器。
+
+**修法**：`get` 也走 `RedisCallback`，直接拿 `byte[]`：
+```java
+byte[] bits = redis.execute((RedisCallback<byte[]>) conn ->
+        conn.stringCommands().get(key.getBytes(StandardCharsets.UTF_8)));
+```
+**教训：Bitmap 这类「非文本」数据，读写都必须绕过 String 序列化器。** 一个走 `RedisCallback`、一个走 `get()`，就是不一致的根源。
+
+### 18.4 面试策略（三句话）
+
+1. **开场就给分类框架**，让面试官顺着你的框架追问，而不是乱枪打鸟
+2. **挑 3 个讲深**，不要 13 个都平铺 —— 平铺等于没有重点
+3. **主动说三个没做的**（预热 / 击穿 / 会话列表），并给出「收益不值」的理由
+
+> 一个说「我什么都做了」的候选人，可信度低于一个说「这三件我没做，因为……」的候选人。
+
+### 18.5 拆出语言篇：`Java面试包装.md`（2026-10-19 晚）
+
+**起因**：用户问「线程池是面试常考，这里不用加吗」。
+
+**判断：不加进 Redis 篇，另起一份。**
+
+理由：`Redis面试包装.md` 的主线是「Redis 解决了哪五类问题」，八节全部围绕这条线。
+硬插一节线程池会断线，而且线程池的密度（7 参数 / 4 种拒绝策略 / 状态机 / `@Async` 四种失效场景）
+远不止一节能装下，塞进去会把 Redis 篇压垮。
+
+**新建 `docs/Java面试包装.md`（10 节）**：
+
+| 节 | 内容 |
+|---|---|
+| 0 | 一句话定位：Redis 篇讲「状态放对了地方」，Java 篇讲「线程管住了」 |
+| 1 | 简历三版本 |
+| 2 | **项目里五个真实并发场景**（本节是地基，面试别背概念，讲这几处） |
+| 3 | 线程池：7 参数 / 流转顺序 / 4 种拒绝 / 默认 OOM 陷阱 / fallback 链 / 两种异常 / 线程数 / 优雅关闭 |
+| 4 | 线程安全：三要素 / `volatile` 与 DCL / 锁升级 / `AtomicBoolean` / `ThreadLocal` 泄漏 |
+| 5 | 集合：四大家族 / `HashMap` 三个数字 / `asList` 三个坑 / `List.of` / `subList` / `toMap` / CHM 拒 null |
+| 6 | Stream 两个易错点（`orElse` 惰性、`groupingBy` 三参数） |
+| 7 | 七条反常识 |
+| 8 | 高频追问 20 问（10 秒答 + 10 想一想） |
+| 9 | 主动暴露两个不足（`@Async` 失败无闭环 / 线程池参数没压测） |
+| 10 | 5 分钟速记卡 |
+
+**第 2 节引用的五个项目锚点（都是真代码）**：
+
+| 位置 | 讲什么 |
+|---|---|
+| `service/FileCompensator.java:18` | `@Async void` + 末尾 `throw` → 异常黑洞，调用方永远收不到 |
+| `resources/application.yml:41` | `scheduling.pool.size: 4`（默认 1，六个任务会串行） |
+| `service/AiTaskConsumer.java:67` | 单线程消费是**故意的**，扩容靠消费者组不靠线程池 |
+| `AiService/PsychologicalSupportService.java:63` | `AtomicBoolean` 首字标记（lambda 限制 + 跨线程可见性） |
+| `config/redisconfig/CacheConfig.java:45` | `ThreadLocalRandom` 做 TTL 抖动，防同时过期 |
+| `config/AsyncConfig.java:34` | bean 双名 + 有界队列 + `CallerRunsPolicy`（本轮新建） |
+
+**四个新澄清的技术点（之前的判断要修正）**：
+
+**① `AbortPolicy` 的异常调用方其实收得到**
+
+之前笼统说「`@Async` 的异常调用方收不到」，不准确。要分两种：
+
+| 异常类型 | 发生在哪 | 调用方收得到吗 |
+|---|---|---|
+| 拒绝异常（队列满 + 线程满） | `submit()` 内部，**调用方线程** | ✅ 收得到 |
+| 任务执行异常（方法体 `throw`） | worker 线程 | ❌ 收不到（`void` 返回时） |
+
+`FileCompensator` 踩的是第二种。第一种反而是安全的。
+
+**② `CallerRunsPolicy` 在线程池 shutdown 后会静默丢任务**
+
+```java
+public void rejectedExecution(Runnable r, ThreadPoolExecutor e) {
+    if (!e.isShutdown()) {   // ← 这个判断
+        r.run();
+    }
+}
+```
+池子已关闭时既不跑也不报错，直接丢。这条几乎没人讲。
+
+**③ `volatile` 防的是 `new` 的「2、3 步重排」**
+
+`instance = new Singleton()` 三步：分配内存 / 初始化对象 / 引用指向内存。
+第 2、3 步可重排 → 别的线程可能拿到构造器还没跑完的半成品。
+
+**④ `toMap` 和 `groupingBy` 对 null 的态度正好相反（我一开始写反了，实跑才纠正）**
+
+在 JDK 17 上写了个测试程序实测（`/tmp/jtest/T.java`）：
+
+```
+toMap null KEY       -> OK (no exception), size=2, keys=[null, b]
+toMap null VALUE     -> NullPointerException: null
+toMap dup KEY        -> IllegalStateException: Duplicate key a (attempted merging values 1 and 2)
+groupingBy null KEY  -> NullPointerException: element cannot be mapped to a null key
+groupingBy null elem -> OK (no exception), size=1, listSize=2
+```
+
+| | null key | null value |
+|---|---|---|
+| `toMap` | ✅ **允许**（落到 HashMap 的 0 号桶） | ❌ 裸 NPE |
+| `groupingBy` | ❌ NPE，**有明确 message** | ✅ 允许 |
+
+原因：`HashMap.merge()` 只判 `value == null`，不判 key；`hash(null)` 返回 0 是合法桶下标。
+而 `groupingBy` 显式加了 `Objects.requireNonNull(..., "element cannot be mapped to a null key")`。
+
+**记法**：`toMap` 卡 value，`groupingBy` 卡 key。
+**教训**：这类「两个 API 行为对比」的结论，不要凭印象写，跑十行代码就能验。
+写文档时我先写成了「toMap 三不（key 重/key null/value null 都不行）」，实跑发现 key null 是允许的。
+
+**④ 用户对 `&` 取桶的原始理解有两处偏差（已在对话中纠正）**
+
+用户写 `return (ans-1)&mod`：
+- 掩码应是 `mod-1` 不是 `mod`（`999 & 8 = 8`，但 `999 % 8 = 7`）
+- `ans-1` 无理由
+
+且混淆了两个场景：HashMap 取桶需要 `&`（**首要理由是防负数**，`-5 % 8 = -5` 会数组越界），
+快速幂取模**不需要** `&`，直接 `%` 就行。
+
+**交叉引用**：`Redis面试包装.md` 文末加了「相关文档」小节，指向本篇，
+并给了「两份怎么串起来讲」的过渡话术（状态归 Redis、并发控制归本地）。
+
+---
+
+*本文档最后更新：2026-10-19。换电脑后：装 Redis（下 Release 不是 Source）→ 拉 `AI-mentalHealthSystem` → 读本文档第 0 节继续。*

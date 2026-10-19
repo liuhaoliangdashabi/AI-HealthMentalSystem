@@ -13,7 +13,7 @@
                 <p class="brand-subtitle">管理后台</p>
             </div>
         </div>
-        <el-menu-item @click="selectMenu" v-for="item in router.options.routes[0].children" :key="item.path" :index="item.path">
+        <el-menu-item @click="selectMenu" v-for="item in menuItems" :key="item.path" :index="item.path">
           <el-icon><component :is="item.meta.icon"/></el-icon>
           <span>{{ item.meta.title }}</span>
         </el-menu-item>
@@ -29,6 +29,10 @@ const router=useRouter()
 const iconUrl=new URL('@/assets/机器人.png',import.meta.url).href
 
 const isCollapse=computed(()=>useAdminStore().isCollapse)
+
+//hidden 的路由不进侧边栏（比如个人中心，只从顶栏头像下拉进）
+const menuItems=computed(()=>router.options.routes[0].children.filter(item=>!item.meta?.hidden))
+
 const selectMenu=(key)=>{
     console.log(key)
     const currentRoute=router.options.routes[0]

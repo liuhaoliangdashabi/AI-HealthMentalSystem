@@ -25,6 +25,7 @@ import org.example.aispringboot.mapper.KnowledgeCategoryMapper;
 import org.example.aispringboot.mapper.UserMapper;
 import org.example.aispringboot.service.convert.KnowledgeConvert;
 import org.example.aispringboot.util.OSSUtil;
+import org.example.aispringboot.util.RedisKeys;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
@@ -57,9 +58,9 @@ public class KnowledgeArticleService {
     @Autowired
     private StringRedisTemplate redis;
 
-    private static final String READ_DELTA_KEY="article:read:delta:";
-    private static final String READ_DIRTY_KEY="article:read:dirty";
-    private static final String DAY_HOT_KEY="article:hot:";
+    private static final String READ_DELTA_KEY=RedisKeys.ARTICLE_READ_DELTA_PREFIX;
+    private static final String READ_DIRTY_KEY=RedisKeys.ARTICLE_READ_DIRTY;
+    private static final String DAY_HOT_KEY=RedisKeys.ARTICLE_HOT_DAY_PREFIX;
 
     private static final int TOP=10;
 
@@ -90,6 +91,12 @@ public class KnowledgeArticleService {
             case "publishedAt"->{
                 if(asc)qw.orderByAsc(KnowledgeArticle::getPublishedAt);
                 else   qw.orderByDesc(KnowledgeArticle::getPublishedAt);
+            }
+            //★ 空串 = 前端没传排序字段，走默认排序，不能当"非法值"处理。
+            //  管理端「知识文章」列表压根不传 sortField，之前直接落到 default 抛
+            //  「不支持的排序字段」，整个列表页打不开 —— 把"没传"和"传错了"混为一谈。
+            case ""->{
+                qw.orderByDesc(KnowledgeArticle::getPublishedAt);
             }
             default ->{
                 log.warn("没见过这种排序:{}",sortField);
@@ -187,27 +194,69 @@ public class KnowledgeArticleService {
         }
     }
 
+    /**
+     * 推荐阅读：7 天热度榜优先，不足 TOP 条时用最新发布的文章补齐。
+     *
+     * <p><b>为什么必须补齐：</b>热度榜是「有人读过才进榜」的。
+     * 一个刚部署、或者当天没人访问的系统，榜里可能只有 1 条甚至 0 条 ——
+     * 前端那一栏就直接空着，看起来像功能坏了。而用户对"推荐"的预期是<b>永远有东西可点</b>。
+     *
+     * <p>补齐用的是"最新发布"，不是"随机"：榜单里的是"最近热门"，补进来的是"最近新文"，
+     * 两者对用户都有意义，且顺序上热门永远在前。
+     *
+     * <p><b>Redis 挂了也走补齐分支</b> —— 推荐位是首页门面，宁可退化成"最新文章列表"，
+     * 也不能因为缓存故障就整块消失。
+     */
     public List<ArticleResponseDTO> getHotArticle() {
-        Set<ZSetOperations.TypedTuple<String>> tuples;
+        //1. 取榜单 ID（Redis 异常 → 空列表，后面自然走补齐）
+        List<String> hotIds = new ArrayList<>();
         try {
-            //榜单可能混着草稿/已删除文章，取2倍做冗余
-            tuples=redis.opsForZSet().reverseRangeWithScores("article:hot:7d",0,TOP*2-1);
+            Set<ZSetOperations.TypedTuple<String>> tuples =
+                    redis.opsForZSet().reverseRangeWithScores(RedisKeys.ARTICLE_HOT_WINDOW, 0, TOP * 2 - 1);
+            if (tuples != null) {
+                hotIds = tuples.stream()
+                        .map(ZSetOperations.TypedTuple::getValue)
+                        .filter(Objects::nonNull)
+                        .toList();
+            }
         } catch (Exception e) {
-            log.warn("获取热点文本列表失败，Redis挂了，快去修复",e);
+            log.warn("读取热度榜失败，降级为按发布时间补齐", e);
+        }
+
+        //2. 按榜单顺序查出「已发布」的（榜里可能混着草稿/已删除）
+        List<KnowledgeArticle> ordered = new ArrayList<>();
+        if (!hotIds.isEmpty()) {
+            Map<String, KnowledgeArticle> byId = articleMapper.selectBatchIds(hotIds).stream()
+                    .filter(a -> ArticleStatus.PUBLISHED.getCode().equals(a.getStatus()))
+                    .collect(Collectors.toMap(KnowledgeArticle::getId, a -> a));
+            hotIds.stream()
+                    .map(byId::get)
+                    .filter(Objects::nonNull)
+                    .limit(TOP)
+                    .forEach(ordered::add);
+        }
+
+        //3. 不足 TOP 条，用最新发布的补齐（排除已经在榜里的，别重复）
+        if (ordered.size() < TOP) {
+            Set<String> existIds = ordered.stream()
+                    .map(KnowledgeArticle::getId)
+                    .collect(Collectors.toSet());
+            List<KnowledgeArticle> fill = articleMapper.selectList(
+                    new LambdaQueryWrapper<KnowledgeArticle>()
+                            .eq(KnowledgeArticle::getStatus, ArticleStatus.PUBLISHED.getCode())
+                            .notIn(!existIds.isEmpty(), KnowledgeArticle::getId, existIds)
+                            .orderByDesc(KnowledgeArticle::getPublishedAt)
+                            .last("limit " + (TOP - ordered.size())));
+            ordered.addAll(fill);
+        }
+
+        if (ordered.isEmpty()) {
             return List.of();
         }
-        if(tuples==null || tuples.isEmpty())return List.of();
-
-        List<String> hotIds=tuples.stream().map(ZSetOperations.TypedTuple::getValue).toList();
-        List<KnowledgeArticle> hotPublishedArticles=articleMapper.selectBatchIds(hotIds).stream()
-                .filter(a->ArticleStatus.PUBLISHED.getCode().equals(a.getStatus()))
-                .toList();
-
-        Map<String,ArticleResponseDTO> dtoMap=complementArticleDTO(hotPublishedArticles);
-        return hotIds.stream()
-                .map(dtoMap::get)
+        Map<String, ArticleResponseDTO> dtoMap = complementArticleDTO(ordered);
+        return ordered.stream()
+                .map(a -> dtoMap.get(a.getId()))
                 .filter(Objects::nonNull)
-                .limit(TOP)
                 .toList();
     }
 

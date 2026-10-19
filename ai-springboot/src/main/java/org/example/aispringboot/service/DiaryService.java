@@ -1,16 +1,14 @@
 package org.example.aispringboot.service;
 
-import cn.hutool.crypto.digest.DigestUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.example.aispringboot.DTO.command.DiaryCommandDTO;
 import org.example.aispringboot.DTO.command.DiaryPageQueryDTO;
 import org.example.aispringboot.DTO.response.DiaryResponseDTO;
+import org.example.aispringboot.DTO.response.UserActivityItem;
 import org.example.aispringboot.entity.EmotionDiary;
 import org.example.aispringboot.entity.User;
 import org.example.aispringboot.exception.BusinessException;
@@ -19,7 +17,6 @@ import org.example.aispringboot.mapper.UserMapper;
 import org.example.aispringboot.service.convert.DiaryConvert;
 import org.example.aispringboot.util.RedisKeys;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.AutoConfigureOrder;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
@@ -29,6 +26,9 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -42,9 +42,11 @@ public class DiaryService {
     private UserMapper userMapper;
     @Autowired
     private StringRedisTemplate redis;
+    @Autowired
+    private AiTaskQueueService queueService;
 
     private static final String DIARY_DUP_LOCK="diary:dup:";
-    private static final String DIARY_USER_QUERY_KEY="diary:user:";
+    private static final String DIARY_USER_RATE_KEY ="diary:user:";
     private static final String DIARY_USER_EDIT_KEY="diary:user:edit:";
 
     public IPage<DiaryResponseDTO> getEmotionalPage(DiaryPageQueryDTO query,
@@ -99,7 +101,7 @@ public class DiaryService {
         }
         //一天一篇
         try {
-            String rateKey=DIARY_USER_QUERY_KEY+userId;
+            String rateKey= DIARY_USER_RATE_KEY +userId;
             Long n=redis.opsForValue().increment(rateKey);
             if(n==null)throw new Exception("Redis读取用户提交日记次数失败");
             if(n==1){
@@ -154,6 +156,10 @@ public class DiaryService {
         }catch(Exception e){
             log.warn("userId={}的uv记录失败，快去修复",userId,e);
         }
+
+        //投递异步分析任务。注意顺序：先落库、再投递 —— 反过来的话消费者可能比
+        //insert 还快，拿着一个还不存在的 diaryId 去查，查到 null 就白跑一趟。
+        queueService.enqueueDiaryAnalysis(diary.getId());
     }
 
     public void updateEmotionDiary(DiaryCommandDTO dto,
@@ -184,12 +190,57 @@ public class DiaryService {
                 .set(EmotionDiary::getEmotionTriggers,dto.getEmotionTriggers())
                 .set(EmotionDiary::getSleepQuality,dto.getSleepQuality())
                 .set(EmotionDiary::getStressLevel,dto.getStressLevel())
+                //★ 正文变了，旧的分析结果就过期了，必须清掉。
+                //  不清的话用户改完日记，详情里还是改之前那套情绪结论 —— 比"没有"更误导人。
+                //  AI 分析结果是"输入的函数"，输入变了输出就得作废，这叫「派生数据失效」。
+                .set(EmotionDiary::getAiEmotionAnalysis,null)
+                .set(EmotionDiary::getAiAnalysisUpdatedAt,null)
                 .set(EmotionDiary::getUpdatedAt, LocalDateTime.now());
 
         if(emotionDiaryMapper.update(null,uw)==0){
             throw new BusinessException("要修改的数据不存在");
         }
 
+        //清空之后重新排队，等消费者算完再写回来
+        queueService.enqueueDiaryAnalysis(diaryId);
+    }
+
+    /**
+     * 手动触发（或补算）一篇日记的 AI 分析。
+     *
+     * <p>为什么要单独开一个口子：自动分析是「写日记时投递」的，
+     * 所以<b>功能上线之前就存在的老日记永远不会被分析</b>。这个方法是给它们补账的。
+     *
+     * <p>幂等靠「已有结果就跳过」实现 —— 用户连点十下，也只会投递一次。
+     */
+    public void requestDiaryAnalysis(Long diaryId, Long userId, boolean isAdmin){
+        EmotionDiary diary=emotionDiaryMapper.selectById(diaryId);
+        if(diary==null){
+            throw new BusinessException("日记不存在");
+        }
+        //越权判断：C 端只能分析自己的，管理端可以帮别人补算
+        if(!isAdmin && !userId.equals(diary.getUserId())){
+            log.warn("用户{}试图分析用户{}的日记{}",userId,diary.getUserId(),diaryId);
+            throw new BusinessException("无权操作他人的日记");
+        }
+        if(diary.getAiEmotionAnalysis()!=null && !diary.getAiEmotionAnalysis().isBlank()){
+            log.debug("日记{}已有分析结果，跳过重复投递",diaryId);
+            return;
+        }
+        //防重复投递：前端会在打开详情时自动触发，多个管理员同时点开同一篇就是 N 次投递，
+        //N 次 AI 调用。60 秒内只允许一次。
+        String lockKey="diary:analyze:lock:"+diaryId;
+        try{
+            Boolean locked=redis.opsForValue().setIfAbsent(lockKey,"1",Duration.ofSeconds(60));
+            if(!Boolean.TRUE.equals(locked)){
+                log.debug("日记{}刚投递过分析任务，跳过",diaryId);
+                return;
+            }
+        }catch(Exception e){
+            //Redis 挂了就别拦了，宁可多算一次也别不算
+            log.warn("日记{}分析防重锁失败，继续投递",diaryId,e);
+        }
+        queueService.enqueueDiaryAnalysis(diaryId);
     }
 
     private void releaseDupLock(Long userId,String fp){
@@ -198,6 +249,39 @@ public class DiaryService {
         }catch(Exception e){
             log.warn("释放日记防重复锁失败，等TTL过期，userId={}",userId,e);
         }
+    }
+
+    /**
+     * 个人主页贡献日历：最近 days 天每天一条记录（同一天多篇只取最新那篇的心情）。
+     *
+     * 注意这里刻意只 select 三列 —— 90 天的日记正文加起来能有几百 KB，
+     * 而日历只需要一个颜色，全查出来是纯浪费。
+     */
+    public List<UserActivityItem> listRecentActivity(Long userId, int days){
+        if(userId==null)return List.of();
+        int span=Math.max(1,days);
+        LocalDate from=LocalDate.now().minusDays(span-1L);
+
+        List<EmotionDiary> list=emotionDiaryMapper.selectList(
+                new LambdaQueryWrapper<EmotionDiary>()
+                        .select(EmotionDiary::getDiaryDate,
+                                EmotionDiary::getMoodScore,
+                                EmotionDiary::getDominantEmotion)
+                        .eq(EmotionDiary::getUserId,userId)
+                        .ge(EmotionDiary::getDiaryDate,from)
+                        .orderByAsc(EmotionDiary::getDiaryDate)
+                        .orderByAsc(EmotionDiary::getId));
+
+        //同一天可能有多篇（库里没强唯一约束），后写的覆盖前面的，跟"最近一篇算数"一致
+        Map<LocalDate,UserActivityItem> byDate=new LinkedHashMap<>();
+        for(EmotionDiary d:list){
+            byDate.put(d.getDiaryDate(),UserActivityItem.builder()
+                    .diaryDate(d.getDiaryDate())
+                    .moodScore(d.getMoodScore())
+                    .dominantEmotion(d.getDominantEmotion())
+                    .build());
+        }
+        return new ArrayList<>(byDate.values());
     }
 
 }

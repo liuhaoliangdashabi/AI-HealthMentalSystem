@@ -11,6 +11,7 @@
                 <router-link to="/consultation" class="nav-link" v-if="isLoggedIn">AI咨询</router-link>
                 <router-link to="/emotion-diary" class="nav-link" v-if="isLoggedIn">情绪日记</router-link>
                 <router-link to="/knowledge" class="nav-link">知识库</router-link>
+                <router-link to="/profile" class="nav-link" v-if="isLoggedIn">我的</router-link>
                 <el-button class="logout-btn" type="primary" 
                     @click="handleLogout" v-if="isLoggedIn">
                     退出登录
@@ -36,13 +37,15 @@
 
 <script setup>
 import {ref,reactive,onMounted} from 'vue'
-import {logout} from '@/api/admin'
+import { logout} from '@/api/admin'
+import { useUserStore } from '@/stores/user'
 import { ElMessage,ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 
 const router=useRouter()
 const iconUrl=new URL('@/assets/机器人.png',import.meta.url).href
 const isLoggedIn=ref(false)
+const userStore=useUserStore()
 
 const handleLogout=()=>{
     ElMessageBox.confirm('确定退出登录吗？', '提示', {
@@ -51,8 +54,9 @@ const handleLogout=()=>{
         type: 'warning'
     }).then(() => {
         logout().then(()=>{
+            //store 和 localStorage 一起清，否则同一个会话里再登录会看到上一个账号的头像
+            userStore.clear()
             localStorage.removeItem('token')
-            localStorage.removeItem('userInfo')
             isLoggedIn.value=false
             router.push('/auth/login')
             ElMessage.success('退出登录成功')

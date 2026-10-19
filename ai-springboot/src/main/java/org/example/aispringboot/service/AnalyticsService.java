@@ -20,6 +20,7 @@ import org.example.aispringboot.mapper.UserMapper;
 import org.example.aispringboot.service.convert.AnalyticsConvert;
 import org.example.aispringboot.util.RedisKeys;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -46,6 +47,26 @@ public class AnalyticsService {
     @Autowired
     private StringRedisTemplate redis;
 
+    /**
+     * 管理端数据看板总览。
+     *
+     * <p><b>它有多贵：</b>四张表 {@code selectList(null)} 全量捞进内存再聚合 ——
+     * user / emotion_diary / consultation_session / consultation_message 全表扫描。
+     * 只要有人点开看板首页，就按表的行数线性烧 CPU 和 GC。
+     *
+     * <p><b>为什么缓存能救：</b>看板是「多人看、几乎没人写」的典型只读视图。
+     * 10 个管理员同时刷新，不加缓存就是 10 次全表扫描，加了就是 1 次 + 9 次 GET。
+     *
+     * <p><b>为什么 TTL 只有 60 秒（见 CacheConfig 里的独立配置）：</b>
+     * 看板的语义是"看现在大概什么样"，60 秒的延迟没人感知得到；
+     * 但沿用全局的 30 分钟，运营改完数据半小时后看板上还是老数字，会以为系统坏了。
+     * <b>缓存 TTL 不是"越长越好"，是按「业务能容忍多旧」定的。</b>
+     *
+     * <p><b>⚠️ 缓存只是遮羞布：</b>真正的解法是让数据库做聚合
+     * （{@code SELECT COUNT(*) ... GROUP BY DATE(created_at)}），别把全表拉进 JVM。
+     * 现在表小所以这么写没炸，数据量一上来缓存也救不了 —— 缓存降低的是频率，不是单次成本。
+     */
+    @Cacheable(cacheNames = "analytics", key = "'overview'")
     public AnalyticsOverviewResponseDTO getOverview() {
         LocalDate today = LocalDate.now();
         LocalDate since = today.minusDays(RECENT_DAYS - 1L);

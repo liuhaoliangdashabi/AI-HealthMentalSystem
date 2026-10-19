@@ -41,7 +41,7 @@ spring:
   task:
     scheduling:
       pool:
-        size: 2 #默认值为1，注意跌过坑
+        size: 4 #默认值为1，注意跌过坑
 jwt:
   secret: ${JWT_SECRET}
   expiration: 86400000  # 24小时（毫秒）

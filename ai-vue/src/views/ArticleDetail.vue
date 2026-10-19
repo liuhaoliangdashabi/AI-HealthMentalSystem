@@ -5,6 +5,10 @@
                 <el-image :src="iconUrl" style="width:50px;height:50px;margin-left:30px;"/>
                 <h3>知识文章详情</h3>
             </div>
+            <el-button class="back-btn" @click="goBack">
+                <el-icon><Back/></el-icon>
+                <span>返回列表</span>
+            </el-button>
         </div>
         <div class="content">
             <!-- 上半部分 -->
@@ -56,6 +60,15 @@ import {ref,computed,onMounted} from 'vue'
 import iconUrl from '@/assets/book.png'
 import {getKnowledgeDetail} from '@/api/frontend'
 import dayjs from 'dayjs'
+import {useRouter} from 'vue-router'
+
+const router=useRouter()
+
+//返回列表用 push('/knowledge') 而不是 router.back()：
+//直接粘贴文章链接进来的人没有"上一页"，back 会跳出站外
+const goBack=()=>{
+    router.push('/knowledge')
+}
 
 
 //url跳转时，能直接从url上读取变量
@@ -103,11 +116,25 @@ onMounted(()=>{
     .header-section {
         background: linear-gradient(135deg, #f59e0b 0%, #8b5cf6 100%);
         color: white;
-        padding: 14px;
+        padding: 14px 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
         .header-content {
             display: flex;
             align-items: center;
             gap: 12px;
+        }
+        .back-btn {
+            background: rgba(255, 255, 255, 0.18);
+            border: 1px solid rgba(255, 255, 255, 0.45);
+            color: #fff;
+            &:hover,
+            &:focus {
+                background: rgba(255, 255, 255, 0.32);
+                border-color: #fff;
+                color: #fff;
+            }
         }
     }
     .content {

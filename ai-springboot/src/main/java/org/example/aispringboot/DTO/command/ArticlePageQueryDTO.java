@@ -13,10 +13,12 @@ public class ArticlePageQueryDTO {
     private String sortDirection;
 
     public void setCurrentPage(Integer currentPage) {
-        if(currentPage!=null)this.currentPage = currentPage;
+        //页码传 0 或负数没意义，保持默认 1
+        if(currentPage!=null && currentPage>0)this.currentPage = currentPage;
     }
 
     public void setSize(Integer size) {
-        if(size!=null)this.size = size;
+        //必须封顶：不封的话 ?size=100000 一次就能把整张表拉进内存
+        if(size!=null)this.size = Math.min(size, 50);
     }
 }

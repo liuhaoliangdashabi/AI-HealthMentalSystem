@@ -19,9 +19,16 @@
                     <div class="garden-title">情绪花园</div>
                 </div>
                 <div class="emotion-info">
-                    <div class="emotion-name">中性</div>
-                    <div class="emotion-score">50</div>
+                    <!-- ⚠️ 这里以前是写死的「中性 / 50」，所以不管分析结果是什么，
+                         画面上永远显示"中性 50" —— 看起来就像分析从来没生效过。 -->
+                    <div class="emotion-name">
+                        {{ emotionAnalyzing ? '分析中' : (currentEmotion.primaryEmotion || '中性') }}
+                    </div>
+                    <div class="emotion-score">
+                        {{ emotionAnalyzing ? '…' : (currentEmotion.emotionScore ?? 50) }}
+                    </div>
                 </div>
+                <div class="emotion-hint" v-if="emotionAnalyzing">小暖正在读你的心情…</div>
                 <div class="warm-tips">
                     <div class="emotion-status-text">
                         <span class="status-label">今天感觉</span>
@@ -224,21 +231,69 @@ const getDefaultEmotion=()=>({
     riskLevel:0,
     suggestion:'',
     improvementSuggestions:[],
-    riskDescription:'您的情绪状态为负面，风险等级为3，建议您及时处理。'
+    riskDescription:'',
+    analyzed:false          //还没分析。轮询靠它判断"该不该继续等"
 })
 const currentEmotion=ref(getDefaultEmotion())
 
 
-//刷新情绪状态
+//=================== 情绪花园刷新 ===================
+//会话结束 → 后端异步分析（模型 5~10 秒）→ 这里轮询等结果。
+//
+//★ 判据用后端的 analyzed 字段，不用"值变没变"：
+//  没算完时后端返回的是一堆默认值（强度 50、风险 0、primaryEmotion 为 null），
+//  拿默认值跟默认值比永远是"没变"；而 primaryEmotion 从"中性"变成 null 又会被
+//  误判成"变了" —— 上一版就是这么在【第一次轮询就停掉】的，用户只能手动点会话。
+let emotionTimer=null
+let emotionPollToken=0     //换会话/再发消息时 +1，让上一轮轮询自己作废
+const emotionAnalyzing=ref(false)
+
+const stopEmotionPoll=()=>{
+    if(emotionTimer){
+        clearTimeout(emotionTimer)
+        emotionTimer=null
+    }
+}
+
 const refreshEmotionLater=()=>{
     const sid=currentSession.value.sessionId
-    setTimeout(()=>loadSessionEmotion(sid),6000)
+    if(!sid||String(sid).startsWith('temp_')) return
+
+    stopEmotionPoll()
+    const token=++emotionPollToken
+    let tries=0
+    emotionAnalyzing.value=true
+
+    const tick=()=>{
+        if(token!==emotionPollToken) return       //已经切走或又发了一轮，别污染新会话
+        tries++
+        loadSessionEmotion(sid,()=>{
+            if(token!==emotionPollToken) return
+            //后端说算完了 → 收工（哪怕结果就是"中性"，那也是模型真的判成中性）
+            if(currentEmotion.value.analyzed){
+                emotionAnalyzing.value=false
+                return
+            }
+            if(tries>=25){                         //25 次 × 1 秒 ≈ 25 秒，模型再慢也该出来了
+                emotionAnalyzing.value=false
+                return
+            }
+            emotionTimer=setTimeout(tick,1000)
+        })
+    }
+    //先等 1 秒，给消费者留点时间，不然第一次必然还是空
+    emotionTimer=setTimeout(tick,1000)
 }
 
 
 
 //新建会话
 const createNewFrontendSession=()=>{
+    //上一轮的轮询必须停掉，否则它会把旧会话的情绪写回花园
+    stopEmotionPoll()
+    emotionPollToken++
+    emotionAnalyzing.value=false
+
     //创建新的会话对象
     const newSession={
         sessionId:`temp_${Date.now()}`,
@@ -375,8 +430,8 @@ const startAIResponse=(sessionId,userMessage)=>{
             throw err
         },
         onClose:()=>{
-            //开始情绪分析
-            loadSessionEmotion(currentSession.value.sessionId)
+            //这里不再立即查情绪：流刚关的时候分析肯定还没写缓存，
+            //查了也是旧值，还会跟轮询抢着赋值。交给 refreshEmotionLater 统一管。
         }
     })
 }
@@ -393,6 +448,11 @@ const handleError=(error)=>{
 
 //点击会话，获取会话数据
 const handleSessionClick=(session)=>{
+    //切会话先掐掉旧轮询，不然它慢一步回来会把新会话的花园覆盖掉
+    stopEmotionPoll()
+    emotionPollToken++
+    emotionAnalyzing.value=false
+
     getSessionDetail(session.id).then(res=>{
         console.log(res)
         sumMessage.value=res
@@ -440,8 +500,19 @@ const getSessionPage=()=>{
     })
 }
 
+//AI 回复是直接进 v-html 的，必须先转义再换行。
+//模型输出不可控，用户也可能诱导它吐出 <img onerror=...> 这种内容，
+//不转义就等于把 XSS 的入口交给了模型
+const escapeHtml=(s)=>s
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;')
+
 const formatMessageContent=(content)=>{
-    return content.replace(/\n/g,'<br/>')
+    if(!content) return ''
+    return escapeHtml(content).replace(/\n/g,'<br/>')
 }
 
 //★ 这个方法在【模板渲染路径】上被调用（模板第 33 行，v-for="dot in 3" 里一次渲染调 3 次）。
@@ -475,22 +546,31 @@ const getRiskText=(level)=>{
 }
 
 
-const loadSessionEmotion=(sessionId)=>{
+const loadSessionEmotion=(sessionId,onDone)=>{
     const id=sessionId.toString().startsWith('session_')?sessionId:`session_${sessionId}`
-    getSessionEmotion(id).then(res=>{
-        console.log(res)
+    return getSessionEmotion(id).then(res=>{
         currentEmotion.value={
             ...currentEmotion.value,
             ...res,
             improvementSuggestions:res?.improvementSuggestions??[]
         }
-    }).catch(()=>{})
+        onDone&&onDone()
+    }).catch(()=>{
+        //查失败也算"这一轮结束"，否则轮询会卡死在这里
+        onDone&&onDone()
+    })
 }
 
 const formatRelativeTime=(timeStr)=>{
     if(!timeStr) return ''
-    const date=new Date(String(timeStr).replace(/-/g,'/'))
-    if(isNaN(date.getTime())) return timeStr
+    //后端 LocalDateTime 序列化出来是 2026-10-19T09:02:29，中间是 T 不是空格。
+    //老代码 replace(/-/g,'/') 只对 "YYYY-MM-DD HH:mm:ss" 有效，带 T 的直接变 Invalid Date，
+    //然后 isNaN 就 return 原串 —— 会话列表里那串 "2026-10-19T09:02:29" 就是这么漏出来的。
+    let date=new Date(timeStr)
+    if(isNaN(date.getTime())){
+        date=new Date(String(timeStr).replace('T',' ').replace(/-/g,'/'))
+    }
+    if(isNaN(date.getTime())) return String(timeStr).replace('T',' ')
     const diff=Date.now()-date.getTime()
     const min=Math.floor(diff/60000)
     const hour=Math.floor(diff/3600000)
@@ -528,6 +608,7 @@ onMounted(()=>{
     })
 })
 onBeforeUnmount(()=>{
+    stopEmotionPoll()
     if(chatHeightObserver){chatHeightObserver.disconnect();chatHeightObserver=null}
 })
 </script>
@@ -743,6 +824,18 @@ onBeforeUnmount(()=>{
                     font-weight: 700;
                     opacity: 0.9;
                 }
+            }
+            //分析中提示：放在圆外面，别挤进那个 80px 的圈里
+            .emotion-hint {
+                margin: 8px auto 0;
+                font-size: 12px;
+                color: #8b7355;
+                text-align: center;
+                animation: hintPulse 1.2s ease-in-out infinite;
+            }
+            @keyframes hintPulse {
+                0%, 100% { opacity: 0.45; }
+                50%      { opacity: 1; }
             }
             .warm-tips {
                 text-align: center;

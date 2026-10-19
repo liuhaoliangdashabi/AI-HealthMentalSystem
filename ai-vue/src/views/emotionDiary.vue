@@ -16,8 +16,9 @@
                  @click="switchToList">我的日记</div>
         </div>
 
+        <div class="main-area">
         <!-- 左侧状态框：显示当前是新增还是修改哪一天 -->
-        <div class="status-panel" v-if="activeTab==='write'">
+        <div class="status-panel" :class="{placeholder: activeTab!=='write'}">
             <div class="status-tag" :class="{editing:editingId}">
                 {{ editingId ? '编辑中' : '新增日记' }}
             </div>
@@ -145,6 +146,7 @@
                     @current-change="handlePageChange"
                 />
             </div>
+        </div>
         </div>
     </div>
 </template>
@@ -308,10 +310,11 @@ onMounted(()=>{
     }
     .tab-bar {
         width: 100%;
-        max-width: 980px;
+        max-width: 1200px;
         box-sizing: border-box;
         margin: 0 auto;
-        padding: 20px 20px 0;
+        //200 = 20(内边距) + 160(状态框) + 20(间距)，让 tab 和右侧表单左边缘对齐
+        padding: 20px 20px 0 200px;
         display: flex;
         gap: 10px;
         flex-wrap: wrap;
@@ -331,12 +334,24 @@ onMounted(()=>{
             }
         }
     }
-    //左侧状态框：宽屏才显示，窄屏自动隐藏，不挡内容
+    //写日记区：左侧状态框 + 右侧表单并排
+    //原来是 fixed + 写死的 top:120px，靠猜"横幅下面大概在哪"，
+    //页面上方有导航栏时必然压住横幅标题 —— 参与文档流就没这个问题
+    .main-area {
+        display: flex;
+        align-items: flex-start;
+        gap: 20px;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+        box-sizing: border-box;
+    }
+    //左侧状态框
     .status-panel {
-        position: fixed;
-        left: 32px;
-        top: 120px;
         width: 160px;
+        flex-shrink: 0;
+        position: sticky;
+        top: 20px;
         background: white;
         border-radius: 10px;
         padding: 16px;
@@ -369,18 +384,25 @@ onMounted(()=>{
             margin-top: 14px;
             width: 100%;
         }
+        //切到「我的日记」时保留占位（不显示但占宽），否则列表会整体左跳 180px
+        &.placeholder {
+            visibility: hidden;
+        }
     }
     @media (max-width: 1400px) {
         .status-panel {
             display: none;
         }
+        .tab-bar {
+            padding-left: 20px;
+        }
     }
     .content {
-        margin: 0 auto;
-        width: 100%;
+        flex: 1;
+        min-width: 0;
         max-width: 980px;
         box-sizing: border-box;
-        padding: 20px;
+        padding: 20px 0;
         .diary-card {
             margin-bottom: 20px;
             background: white;

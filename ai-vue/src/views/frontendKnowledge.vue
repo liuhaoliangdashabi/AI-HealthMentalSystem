@@ -3,8 +3,12 @@
         <div class="header-section">
             <div class="header-content">
                 <el-image :src="iconUrl" style="width:50px;height:50px;margin-left:10px;"/>
-                <h1>情绪日志</h1>
+                <h1>知识库</h1>
             </div>
+            <el-button class="exit-btn" @click="goHome">
+                <el-icon><Back/></el-icon>
+                <span>退出</span>
+            </el-button>
         </div>
         <div class="content">
             <!-- 左侧部分 -->
@@ -56,12 +60,18 @@
             </div>
             
         </div>
+        <!-- 回到顶部：滚过 300px 才出现，一进页面就飘个按钮很碍眼 -->
+        <transition name="back-top-fade">
+            <div v-show="showBackTop" class="back-top" @click="scrollToTop">
+                <el-icon :size="20"><Top/></el-icon>
+            </div>
+        </transition>
     </div>
 </template>
 
 
 <script setup>
-import {ref,reactive,onMounted} from 'vue'
+import {ref,reactive,onMounted,onBeforeUnmount} from 'vue'
 import iconUrl from '@/assets/book.png'
 import { getKnowledgeList, getHotArticles } from '@/api/frontend'
 import dayjs from 'dayjs'
@@ -97,6 +107,24 @@ const goToArticle=(id)=>{
     router.push(`/knowledge/article/${id}`)
 }
 
+//退出：回首页。用 replace 不是 push —— 点了"退出"再按浏览器后退，
+//不应该又弹回知识库（那就不叫退出了）
+const goHome=()=>{
+    router.replace('/')
+}
+
+//========== 回到顶部 ==========
+const showBackTop=ref(false)
+const BACK_TOP_THRESHOLD=300
+
+const handleScroll=()=>{
+    showBackTop.value=window.scrollY>BACK_TOP_THRESHOLD
+}
+
+const scrollToTop=()=>{
+    window.scrollTo({top:0,behavior:'smooth'})
+}
+
 onMounted(()=>{
     getPageList()
     // 推荐阅读：改调「7 天热度榜」接口（后端 GET /knowledge/article/hot）
@@ -104,11 +132,19 @@ onMounted(()=>{
     getHotArticles().then(res=>{
         recommendList.value=res
     })
+    window.addEventListener('scroll',handleScroll,{passive:true})
+})
+
+//组件卸载时必须摘掉监听，否则每次进这个页面都会多挂一个，来回切几次就泄漏了
+onBeforeUnmount(()=>{
+    window.removeEventListener('scroll',handleScroll)
 })
 
 const handleChange=(page)=>{
     pagination.currentPage=page
     getPageList()
+    //翻页后回到顶部，不然还停在上一次的底部，得自己往上拖
+    scrollToTop()
 }
 </script>
 
@@ -127,11 +163,54 @@ const handleChange=(page)=>{
         background: linear-gradient(135deg, #f59e0b 0%, #8b5cf6 100%);
         color: white;
         padding: 22px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
         .header-content {
             display: flex;
             align-items: center;
             gap: 12px;
         }
+        .exit-btn {
+            background: rgba(255, 255, 255, 0.18);
+            border: 1px solid rgba(255, 255, 255, 0.45);
+            color: #fff;
+            &:hover,
+            &:focus {
+                background: rgba(255, 255, 255, 0.32);
+                border-color: #fff;
+                color: #fff;
+            }
+        }
+    }
+    .back-top {
+        position: fixed;
+        right: 40px;
+        bottom: 80px;
+        width: 46px;
+        height: 46px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #f59e0b 0%, #8b5cf6 100%);
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        box-shadow: 0 6px 18px rgba(139, 92, 246, 0.35);
+        z-index: 100;
+        transition: transform 0.2s ease;
+        &:hover {
+            transform: translateY(-3px);
+        }
+    }
+    .back-top-fade-enter-active,
+    .back-top-fade-leave-active {
+        transition: opacity 0.25s ease, transform 0.25s ease;
+    }
+    .back-top-fade-enter-from,
+    .back-top-fade-leave-to {
+        opacity: 0;
+        transform: translateY(10px);
     }
     .content {
         display: flex;

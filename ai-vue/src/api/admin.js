@@ -58,6 +58,11 @@ export function deleteEmotional(id){
     return service.delete(`/emotion-diary/admin/${id}`)
 }
 
+//手动触发一篇日记的 AI 分析（给上线前的老日记补算用）
+export function analyzeDiary(id){
+    return service.post(`/emotion-diary/${id}/analyze`)
+}
+
 export function getAnalyticsOverview(){
     return service.get('/data-analytics/overview')
 }

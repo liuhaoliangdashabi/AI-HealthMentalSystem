@@ -33,6 +33,10 @@ public class KnowledgeController {
     private FileService fileService;
     @Autowired
     private OSSUtil ossUtil;
+    @Autowired
+    private AiTaskConsumer aiTaskConsumer;
+    @Autowired
+    private OnlineUserService onlineUserService;
 
     //---------------------------------category相关
 
@@ -163,6 +167,9 @@ public class KnowledgeController {
     }
 
     //-----------------------------------Data-analytics相关
+    //⚠️ 这三个接口必须锁管理端。看板里是全站数据（用户总数、日记数、情绪分布），
+    //   C 端用户能看就是数据泄露 —— 之前只校验了"登录"，没校验"是不是管理员"。
+    @PreAuthorize("hasRole('2')")
     @GetMapping("/data-analytics/overview")
     public Result<AnalyticsOverviewResponseDTO> analyticsOverview(
             @AuthenticationPrincipal UserLoginResponseDTO.UserDetailResponseDTO user){
@@ -170,10 +177,28 @@ public class KnowledgeController {
         return Result.success(analyticsService.getOverview());
     }
 
+    @PreAuthorize("hasRole('2')")
     @GetMapping("/data-analytics/uv-trend")
     public Result<List<UvTrendItem>> uvTrend(
             @AuthenticationPrincipal UserLoginResponseDTO.UserDetailResponseDTO user){
         log.debug("Id={}查询UV趋势",user.getId());
         return Result.success(analyticsService.getUVTrend());
+    }
+
+    //在线人数。data 里返回 -1 表示 Redis 读失败（不是"没人"），前端要能区分
+    @PreAuthorize("hasRole('2')")
+    @GetMapping("/data-analytics/online")
+    public Result<Map<String,Object>> onlineUsers(
+            @AuthenticationPrincipal UserLoginResponseDTO.UserDetailResponseDTO user){
+        log.debug("Id={}查询在线人数",user.getId());
+        return Result.success(Map.of("online",onlineUserService.count()));
+    }
+
+    //--------------------------------杂七杂八
+    //运维指标：暴露的是队列内部结构（积压量、死信数），只给管理端看
+    @PreAuthorize("hasRole('2')")
+    @GetMapping("/task-queue")
+    public Result<Map<String,Object>> getTaskQueueStats(){
+        return  Result.success(aiTaskConsumer.stats());
     }
 }

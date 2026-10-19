@@ -3,19 +3,15 @@
         <PageHead title="情绪日志"/>
         <TableSearch :formItem="formItem" @search="handleSearch"/>
         <el-table :data="tableData" style="width:100%">
-            <el-table-column prop="id" label="用户ID" width="80"/>
-            <el-table-column label="会话ID" width="80">
-                <template #default="scope">
-                    <el-avatar>{{ scope.row.nickname }}</el-avatar>
-                </template>
-            </el-table-column>
+            <el-table-column prop="userId" label="用户ID" width="80"/>
+            <el-table-column prop="username" label="用户" width="120" show-overflow-tooltip/>
             <el-table-column prop="diaryDate" label="记录日期" width="110"/>
-            <el-table-column label="情绪评分">
+            <el-table-column label="情绪评分" width="180">
                 <template #default="scope">
                     <el-rate :model-value="scope.row.moodScore" :max="10" disabled/>
                 </template>
             </el-table-column>
-            <el-table-column label="生活指标" width="120">
+            <el-table-column label="生活指标" width="110">
                 <template #default="scope">
                     <div>
                         <p>睡眠：{{ scope.row.sleepQuality }}/5</p>
@@ -23,8 +19,8 @@
                     </div>
                 </template>
             </el-table-column>
-            <el-table-column prop="emotionTriggers" label="情绪触发因素" width="120"/>
-            <el-table-column prop="diaryContent" label="日记内容" width="240"/>
+            <el-table-column prop="emotionTriggers" label="情绪触发因素" width="150" show-overflow-tooltip/>
+            <el-table-column prop="diaryContent" label="日记内容" width="240" show-overflow-tooltip/>
             <el-table-column label="操作" width="140" fixed="right">
                 <template #default="scope">
                     <el-button @click="viewSessionDetail(scope.row)" class="geren-btn-minpadding" text type="primary">详情</el-button>
@@ -74,7 +70,15 @@
                     </el-descriptions> 
                 </div>
                 <div class="detail-section">
-                    <h4>AI情绪分析结果</h4>
+                    <div class="section-head">
+                        <h4>AI情绪分析结果</h4>
+                        <!-- 老日记没有分析结果（功能上线前写的），给个补算入口 -->
+                        <el-button v-if="currentDetail && !currentDetail.aiEmotionAnalysis"
+                            size="small" type="primary" plain
+                            :loading="analyzing" @click="triggerAnalyze">
+                            {{ analyzing ? '分析中...' : '生成分析' }}
+                        </el-button>
+                    </div>
                     <div class="ai-analysis-result">
                         <el-descriptions :column="2" border>
                             <el-descriptions-item label="主要情绪">
@@ -125,8 +129,8 @@
 </template>
 
 <script setup>
-import {ref,reactive,onMounted} from 'vue'
-import {getEmotionalPage,deleteEmotional} from '@/api/admin'
+import {ref,reactive,onMounted,onUnmounted} from 'vue'
+import {getEmotionalPage,deleteEmotional,analyzeDiary} from '@/api/admin'
 import { ElMessage,ElMessageBox } from 'element-plus'
 import PageHead from '@/components/PageHead.vue'
 import TableSearch from '@/components/TableSearch.vue'
@@ -252,9 +256,64 @@ const viewSessionDetail=(row)=>{
         aiData.value=JSON.parse(row.aiEmotionAnalysis)
     }else{
         aiData.value={}
+        //★ 打开就自动补算，不用用户点按钮。
+        //  后端有 60 秒防重锁 + "已有结果就跳过"，多开几次也只会真跑一次。
+        triggerAnalyze(true)
     }
     detailDialogVisible.value=true
 }
+
+//补算 AI 分析：投递到 Stream 后轮询，算完自动把结果填进弹窗
+//silent=true 时不弹"已提交"，因为用户没主动点（是打开弹窗自动触发的）
+const analyzing=ref(false)
+let analyzeTimer=null   //放在模块级，组件卸载时才清得掉
+const triggerAnalyze=async(silent=false)=>{
+    if(!currentDetail.value || analyzing.value) return
+    const id=currentDetail.value.id
+    analyzing.value=true
+    try{
+        await analyzeDiary(id)
+        if(!silent) ElMessage.success('已提交，正在分析...')
+        //消费者 800ms 一轮 + 模型 5~10 秒，20 次 × 1.2 秒 = 24 秒，够用了
+        let tries=0
+        //先掐掉上一轮，否则连点两次会留下一个没人清的定时器
+        if(analyzeTimer){ clearInterval(analyzeTimer); analyzeTimer=null }
+        analyzeTimer=setInterval(async()=>{
+            tries++
+            await handleSearch()
+            const row=tableData.value.find(r=>r.id===id)
+            if(row && row.aiEmotionAnalysis){
+                clearInterval(analyzeTimer)
+                analyzeTimer=null
+                //用户可能已经切到别的日记了，别把结果写到新弹窗里
+                if(currentDetail.value && currentDetail.value.id===id){
+                    currentDetail.value=row
+                    try{
+                        aiData.value=JSON.parse(row.aiEmotionAnalysis)
+                    }catch(err){
+                        //后端存的不是合法 JSON（比如空串）时，别让整个弹窗崩掉
+                        console.warn('AI 分析结果解析失败',err)
+                    }
+                }
+                analyzing.value=false
+                if(!silent) ElMessage.success('分析完成')
+            }else if(tries>=20){
+                clearInterval(analyzeTimer)
+                analyzeTimer=null
+                analyzing.value=false
+                ElMessage.warning('分析还在排队，稍后重新打开详情看看')
+            }
+        },1200)
+    }catch(e){
+        analyzing.value=false
+        ElMessage.error('提交失败')
+    }
+}
+
+//离开页面时停掉轮询：不然它会继续每 1.2 秒打一次接口，最多白跑 20 次
+onUnmounted(()=>{
+    if(analyzeTimer){ clearInterval(analyzeTimer); analyzeTimer=null }
+})
 
 </script>
 
@@ -267,6 +326,18 @@ const viewSessionDetail=(row)=>{
 .detail-content {
   .detail-section {
     margin-bottom: 24px;
+
+    //标题 + 右侧按钮（「生成分析」）
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+
+      h4 {
+        margin: 0;   //父级 h4 自带 margin-bottom，这里要清掉，否则标题和按钮不在一条线上
+      }
+    }
     
     h4 {
       margin: 0 0 16px 0;

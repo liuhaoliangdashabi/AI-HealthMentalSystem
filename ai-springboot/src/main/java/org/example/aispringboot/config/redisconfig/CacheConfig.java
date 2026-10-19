@@ -50,7 +50,20 @@ public class CacheConfig implements CachingConfigurer {
                 .serializeValuesWith(RedisSerializationContext.SerializationPair
                         .fromSerializer(json));
 
-        return RedisCacheManager.builder(factory).cacheDefaults(cfg).build();
+        return RedisCacheManager.builder(factory)
+                .cacheDefaults(cfg)
+                //★ 按 cacheName 单独配 TTL。全局默认是 30~40 分钟，那是给「文章详情」这种
+                //  改一次、看很久的数据用的。但不同数据的"可容忍陈旧度"根本不一样：
+                //
+                //  analytics：管理端看板。运营要看到"今天新增了多少"，60 秒的延迟无感，
+                //             30 分钟的延迟会让人以为系统坏了。宁可多回源几次。
+                //  user     ：用户信息。改昵称/换头像必须立刻生效 —— 但它靠 @CacheEvict
+                //             保证，不靠 TTL，所以沿用全局 30 分钟没问题。
+                //
+                //  教训：一个全局 TTL 套所有缓存，最后一定是"有的太短白回源、有的太长像 bug"。
+                .withCacheConfiguration("analytics",
+                        cfg.entryTtl(Duration.ofSeconds(60)))
+                .build();
     }
 
     @Nullable

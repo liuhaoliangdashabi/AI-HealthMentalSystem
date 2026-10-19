@@ -10,10 +10,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.example.aispringboot.DTO.command.DiaryCommandDTO;
 import org.example.aispringboot.DTO.command.DiaryPageQueryDTO;
 import org.example.aispringboot.DTO.command.UserLoginCommandDTO;
+import org.example.aispringboot.DTO.command.UserProfileUpdateCommandDTO;
 import org.example.aispringboot.DTO.command.UserRegisterCommandDTO;
 import org.example.aispringboot.DTO.response.DiaryResponseDTO;
+import org.example.aispringboot.DTO.response.UserActivityItem;
 import org.example.aispringboot.DTO.response.UserLoginResponseDTO;
 import org.example.aispringboot.common.Result;
+import org.example.aispringboot.enumClass.UserType;
 import org.example.aispringboot.exception.BusinessException;
 import org.example.aispringboot.service.DiaryService;
 import org.example.aispringboot.service.SignService;
@@ -25,6 +28,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -107,6 +111,23 @@ public class UserController {
         return Result.success();
     }
 
+    /**
+     * 手动触发一篇日记的 AI 分析。
+     *
+     * <p>存在的理由：自动分析是「写日记时投递」的，所以<b>上线前就存在的老日记永远不会有结果</b>。
+     * 这个接口就是给它们补算用的 —— 详情页看到"暂无分析"时点一下，几秒后刷新就有了。
+     *
+     * <p>幂等：已经有分析结果的直接返回，不会重复烧 AI 额度。
+     */
+    @PostMapping("/emotion-diary/{id}/analyze")
+    public Result<Void> analyzeDiary(@PathVariable("id")Long diaryId,
+                                     @AuthenticationPrincipal UserLoginResponseDTO.UserDetailResponseDTO user){
+        boolean isAdmin= UserType.ADMIN.getCode().equals(user.getUserType());
+        log.debug("Id={}触发日记{}的AI分析，isAdmin={}",user.getId(),diaryId,isAdmin);
+        diaryService.requestDiaryAnalysis(diaryId,user.getId(),isAdmin);
+        return Result.success();
+    }
+
     @PostMapping("/user/sign")
     public Result<Boolean> sign(@AuthenticationPrincipal UserLoginResponseDTO.UserDetailResponseDTO user){
         log.debug("Id={}签到",user.getId());
@@ -117,6 +138,34 @@ public class UserController {
     public Result<Map<String,Object>> getSignStatus(@AuthenticationPrincipal UserLoginResponseDTO.UserDetailResponseDTO user){
         log.debug("Id={}查询近期签到状态",user.getId());
         return Result.success(signService.getSignStatus(user.getId()));
+    }
+
+    //个人主页贡献日历：13 周 = 91 天，跟前端网格列数对齐
+    private static final int PROFILE_ACTIVITY_DAYS=91;
+
+    @GetMapping("/user/activity")
+    public Result<List<UserActivityItem>> getMyActivity(
+            @AuthenticationPrincipal UserLoginResponseDTO.UserDetailResponseDTO user){
+        log.debug("Id={}查询个人主页活跃记录",user.getId());
+        return Result.success(diaryService.listRecentActivity(user.getId(),PROFILE_ACTIVITY_DAYS));
+    }
+
+    //换头像。body 里传 objectKey（上传接口的 filePath），不是完整 URL
+    @PutMapping("/user/avatar")
+    public Result<Map<String,String>> updateAvatar(@RequestBody Map<String,String> body,
+                                                   @AuthenticationPrincipal UserLoginResponseDTO.UserDetailResponseDTO user){
+        String avatar=body==null?null:body.get("avatar");
+        log.debug("Id={}更换头像，avatar={}",user.getId(),avatar);
+        return Result.success(Map.of("avatar",userService.updateAvatar(user.getId(),avatar)));
+    }
+
+    //修改个人资料（昵称/邮箱/手机/性别/生日）。用户名和密码不在这个接口里
+    @PutMapping("/user/profile")
+    public Result<UserLoginResponseDTO.UserDetailResponseDTO> updateProfile(
+            @Valid @RequestBody UserProfileUpdateCommandDTO commandDTO,
+            @AuthenticationPrincipal UserLoginResponseDTO.UserDetailResponseDTO user){
+        log.debug("Id={}修改个人资料",user.getId());
+        return Result.success(userService.updateProfile(user.getId(),commandDTO));
     }
 
 }

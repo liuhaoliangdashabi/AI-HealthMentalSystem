@@ -41,6 +41,15 @@ const backendRoutes=[
                     title:'情绪日志',
                     icon:'User'
                 }
+            },
+            {
+                //复用 C 端个人主页。hidden:true 让它不进侧边栏，只从顶栏头像下拉进
+                path:'profile',
+                component:()=>import('@/views/profile.vue'),
+                meta:{
+                    title:'个人中心',
+                    hidden:true
+                }
             }
         ]
     },{
@@ -80,6 +89,9 @@ const frontendRoutes=[
             },{
                 path:'emotion-diary',
                 component:()=>import('@/views/emotionDiary.vue')
+            },{
+                path:'profile',
+                component:()=>import('@/views/profile.vue')
             },{
                 path:'knowledge',
                 component:()=>import('@/views/frontendKnowledge.vue')

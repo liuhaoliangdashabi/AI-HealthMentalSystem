@@ -147,10 +147,15 @@ public class KnowledgeConsultationService {
         String json=session.getLastEmotionAnalysis();
         if(json==null || json.isBlank()){
             log.debug("会话{}还没有情绪分析结果",sessionId);
-            return normalize(SessionEmotionResponseDTO.builder().build());
+            //analyzed=false 是给前端轮询看的：它能明确区分「还没算」和「算出来是中性」
+            SessionEmotionResponseDTO empty=normalize(SessionEmotionResponseDTO.builder().build());
+            empty.setAnalyzed(false);
+            return empty;
         }
         try{
-            return normalize(JSONUtil.toBean(json, SessionEmotionResponseDTO.class));
+            SessionEmotionResponseDTO dto=normalize(JSONUtil.toBean(json, SessionEmotionResponseDTO.class));
+            dto.setAnalyzed(true);
+            return dto;
         }catch(Exception e){
             log.warn("会话{}的情绪分析JSON解析失败，原内容={}",sessionId,json,e);
             throw new BusinessException("情绪分析数据格式异常");

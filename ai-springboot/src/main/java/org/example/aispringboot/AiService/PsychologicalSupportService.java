@@ -6,6 +6,7 @@ import org.example.aispringboot.DTO.response.ConsultationMessageResponseDTO;
 import org.example.aispringboot.entity.ConsultationSession;
 import org.example.aispringboot.exception.BusinessException;
 import org.example.aispringboot.mapper.ConsultationSessionMapper;
+import org.example.aispringboot.service.AiTaskQueueService;
 import org.example.aispringboot.service.ConsultationMessageService;
 import org.example.aispringboot.service.ConsultationSessionsService;
 import org.springframework.ai.chat.client.ChatClient;
@@ -35,6 +36,8 @@ public class PsychologicalSupportService {
     private ConsultationSessionMapper consultationSessionMapper;
     @Autowired
     private EmotionAnalysisService emotionAnalysisService;
+    @Autowired
+    private AiTaskQueueService queueService;
 
     public StructOutPut.StreamChatSession startSession(Long userId, ConsultationSectionCreateDTO createDTO){
         ConsultationSession consultationSession=consultationSessionsService.createSession(userId,createDTO);
@@ -120,7 +123,7 @@ public class PsychologicalSupportService {
                         //消息存储到表中
                         consultationMessageService.saveAiMessage(dbSessionId,completeRes,"openai");
                         sink.complete();
-                        emotionAnalysisService.analyzeAsync(dbSessionId);
+                        queueService.enqueueEmotionAnalysis(dbSessionId);
                     })
                     .doOnError(error->{
                         log.error("流式对话失败",error);
