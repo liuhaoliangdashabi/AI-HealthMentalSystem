@@ -4,7 +4,9 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.example.common.Result;
+import org.example.knowledgeservice.DTO.command.ArticleCommandDTO;
 import org.example.knowledgeservice.DTO.command.ArticlePageQueryDTO;
+import org.example.knowledgeservice.DTO.command.ArticleStatusCommandDTO;
 import org.example.knowledgeservice.DTO.response.ArticleResponseDTO;
 import org.example.knowledgeservice.service.KnowledgeArticleService;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -48,18 +50,20 @@ public class KnowledgeArticleController {
     @PostMapping("/knowledge/article")
     public Result<Void> createArticle(
             @Valid @RequestBody ArticleCommandDTO commandDTO,
-            @AuthenticationPrincipal UserLoginResponseDTO.UserDetailResponseDTO user){
-        log.debug("Id={}新建文章",user.getId());
+            @RequestHeader(value="X-User-Id",required=false)Long userId,
+            @RequestHeader(value="X-User-Name",required=false)String userName){
+        log.debug("Id={}新建文章",userId);
 //        String username=user.getUsername().isBlank()?
 //                user.getEmail():user.getUsername();
-        articleService.createArticle(commandDTO,user.getId());
+        articleService.createArticle(commandDTO,userId,userName);
         return Result.success();
     }
 
     @PutMapping("/knowledge/article/{id}/status")
     public Result<Void> putArticleStatus(@PathVariable("id") String articleId,@Valid @RequestBody ArticleStatusCommandDTO status,
-                                         @AuthenticationPrincipal UserLoginResponseDTO.UserDetailResponseDTO user){
-        log.debug("Id={}修改文章状态",user.getId());
+                                         @RequestHeader(value="X-User-Id",required=false)Long userId,
+                                         @RequestHeader(value="X-User-Name",required=false)String userName){
+        log.debug("Id={}修改文章状态",userId);
         articleService.putArticleStatus(articleId,status);
         return Result.success();
     }
@@ -67,15 +71,15 @@ public class KnowledgeArticleController {
     @PutMapping("/knowledge/article/{id}")
     public Result<Void> updateArticleDetail(@PathVariable String id,
                                             @Valid @RequestBody ArticleCommandDTO commandDTO,
-                                            @AuthenticationPrincipal UserLoginResponseDTO.UserDetailResponseDTO user){
-        log.debug("Id={}修改文章articleId={}详情",user.getId(),id);
+                                            @RequestHeader(value="X-User-Id",required=false)Long userId){
+        log.debug("Id={}修改文章articleId={}详情",userId,id);
         articleService.putArticleDetail(id,commandDTO);
         return Result.success();
     }
     @DeleteMapping("/knowledge/article/{id}")
     public Result<Void> deleteArticle(@PathVariable String id,
-                                      @AuthenticationPrincipal UserLoginResponseDTO.UserDetailResponseDTO user){
-        log.debug("Id={}要删除articleId={}",user.getId(),id);
+                                      @RequestHeader(value="X-User-Id",required=false)Long userId){
+        log.debug("Id={}要删除articleId={}",userId,id);
         articleService.deleteArticle(id);
         return Result.success();
     }
