@@ -44,7 +44,7 @@ public class KnowledgeConvert {
 
     public static KnowledgeArticle commandToEntity(ArticleCommandDTO cmd,
                                                    Long authorId,String authorName){
-        return KnowledgeArticle.builder()
+        KnowledgeArticle k=KnowledgeArticle.builder()
                 .title(cmd.getTitle())
                 .content(cmd.getContent())
                 .coverImage(cmd.getCoverImage())
@@ -58,6 +58,8 @@ public class KnowledgeConvert {
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
+        if(k.getPublishedAt()==null)k.setPublishedAt(LocalDateTime.now());
+        return k;
     }
 
     public static KnowledgeArticle toUpdateEntity(String id, ArticleCommandDTO cmd){

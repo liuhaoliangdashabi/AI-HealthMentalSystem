@@ -45,7 +45,7 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
             ServerHttpRequest newReq=exchange.getRequest().mutate()
                     .header("X-User-Id", String.valueOf(jwt.getClaim("userId").asLong()))
                     .header("X-User-Role", String.valueOf(jwt.getClaim("roleType").asInt()))
-                    .header("X-User-Name",jwt.getClaim("userName").toString())
+                    .header("X-User-Name",jwt.getClaim("username").asString())
                     .build();
             return chain.filter(exchange.mutate().request(newReq).build());
         } catch (Exception e) {
