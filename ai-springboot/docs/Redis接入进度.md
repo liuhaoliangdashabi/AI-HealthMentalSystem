@@ -779,7 +779,7 @@ public void deleteCategory(Long id) {
 | JDK 动态代理 | 类**实现了接口** | 生成一个实现同一接口的类 |
 | CGLIB | 类**没接口** | 用字节码生成它的**子类**，重写方法 |
 
-`KnowledgeCategoryService` 没实现接口 → 走 **CGLIB** → 生成子类。
+`CategoryService` 没实现接口 → 走 **CGLIB** → 生成子类。
 
 > 📌 顺便记住一个面试点：**这就是 `@Transactional` 不能加在 `final` 方法上的原因** —— 子类没法重写 final 方法。`private` 同理。
 
@@ -1071,7 +1071,7 @@ unless = "#result != null && #result.status != T(...ArticleStatus).PUBLISHED.get
 
 > 状态核对于 **2026-10-13**（对着代码核的，不是对着记忆）。兜底 / `timeout` / `jti` 三项已于当日复查后勾掉。
 
-1. ✅ **文章详情缓存的跨模块失效点已修**（2026-10-14 核对代码）—— `KnowledgeCategoryService` 新增 `evictArticleCache(List<String>)`，两个 `deleteCategory` 都先捞 `affectedArticles` 再 `evictAfterCommit(articleIds)`，`article` 缓存里的 `categoryName` 不再脏读。（仍是"缓存失效点散落在各模块"的好素材，面试能讲）
+1. ✅ **文章详情缓存的跨模块失效点已修**（2026-10-14 核对代码）—— `CategoryService` 新增 `evictArticleCache(List<String>)`，两个 `deleteCategory` 都先捞 `affectedArticles` 再 `evictAfterCommit(articleIds)`，`article` 缓存里的 `categoryName` 不再脏读。（仍是"缓存失效点散落在各模块"的好素材，面试能讲）
 2. ✅ **防穿透已收尾** —— 见 8.4（`loadDetail:36` 已 `return null`）
 3. ✅ 已修：`ArticleContentService` 那句错注释（`//这里判断用户状态`）已经不在了
 4. ⬜ `ArticleReadCountTask:45` 的 `read_count = IFNULL(read_count,0) + delta` 仍是**裸字符串拼接**（来源是 Redis 的整数，
@@ -1145,7 +1145,7 @@ unless = "#result != null && #result.status != T(...ArticleStatus).PUBLISHED.get
 
 `CacheConfig` 实现 `CachingConfigurer` + 自定义 `CacheErrorHandler`，一次性覆盖：
 - `ArticleContentService.loadDetail` 的 `@Cacheable`
-- `KnowledgeArticleService` 三个 `@CacheEvict`（`:132` / `:181` / `:192`）
+- `ArticleService` 三个 `@CacheEvict`（`:132` / `:181` / `:192`）
 
 **要点**：
 

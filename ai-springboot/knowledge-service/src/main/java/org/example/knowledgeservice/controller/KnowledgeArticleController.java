@@ -8,8 +8,7 @@ import org.example.knowledgeservice.DTO.command.ArticleCommandDTO;
 import org.example.knowledgeservice.DTO.command.ArticlePageQueryDTO;
 import org.example.knowledgeservice.DTO.command.ArticleStatusCommandDTO;
 import org.example.knowledgeservice.DTO.response.ArticleResponseDTO;
-import org.example.knowledgeservice.service.KnowledgeArticleService;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.example.knowledgeservice.service.ArticleService;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -18,8 +17,8 @@ import java.util.List;
 @RestController
 @RequestMapping("/api")
 public class KnowledgeArticleController {
-    private final KnowledgeArticleService articleService;
-    public KnowledgeArticleController(KnowledgeArticleService articleService){
+    private final ArticleService articleService;
+    public KnowledgeArticleController(ArticleService articleService){
         this.articleService=articleService;
     }
 

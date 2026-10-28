@@ -34,7 +34,7 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Service
-public class KnowledgeArticleService {
+public class ArticleService {
     @Autowired
     private KnowledgeArticleMapper articleMapper;
     @Autowired

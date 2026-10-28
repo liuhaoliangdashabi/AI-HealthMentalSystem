@@ -25,7 +25,7 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Service
-public class KnowledgeCategoryService {
+public class CategoryService {
     private final KnowledgeCategoryMapper categoryMapper;
     private final KnowledgeArticleMapper articleMapper;
     private final RedisTemplate<String,Object> redisTemplate;
@@ -37,10 +37,10 @@ public class KnowledgeCategoryService {
     private static final Duration CATEGORY_TREE_TTL=Duration.ofMinutes(10);
     private static final String ARTICLE_CACHE_NAME="article";
 
-    public KnowledgeCategoryService(KnowledgeCategoryMapper categoryMapper,
-                                    KnowledgeArticleMapper articleMapper,
-                                    RedisTemplate<String,Object> redisTemplate,
-                                    CacheManager cacheManager){
+    public CategoryService(KnowledgeCategoryMapper categoryMapper,
+                           KnowledgeArticleMapper articleMapper,
+                           RedisTemplate<String,Object> redisTemplate,
+                           CacheManager cacheManager){
         this.articleMapper=articleMapper;
         this.categoryMapper=categoryMapper;
         this.redisTemplate=redisTemplate;

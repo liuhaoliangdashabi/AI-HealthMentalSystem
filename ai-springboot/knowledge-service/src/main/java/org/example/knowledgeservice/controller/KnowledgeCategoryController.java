@@ -3,7 +3,7 @@ package org.example.knowledgeservice.controller;
 import lombok.extern.slf4j.Slf4j;
 import org.example.common.Result;
 import org.example.knowledgeservice.DTO.response.CategoryResponseDTO;
-import org.example.knowledgeservice.service.KnowledgeCategoryService;
+import org.example.knowledgeservice.service.CategoryService;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -13,9 +13,9 @@ import java.util.List;
 @RequestMapping("/api")
 public class KnowledgeCategoryController {
 
-    private final KnowledgeCategoryService categoryService;
+    private final CategoryService categoryService;
 
-    public KnowledgeCategoryController(KnowledgeCategoryService categoryService) {
+    public KnowledgeCategoryController(CategoryService categoryService) {
         this.categoryService = categoryService;
     }
 
