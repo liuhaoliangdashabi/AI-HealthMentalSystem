@@ -36,3 +36,7 @@ spring:
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml
   type-aliases-package: org.example.knowledgeservice.entity
+
+oss:
+  region: cn-beijing
+  bucket: mental-health-ai-assistant

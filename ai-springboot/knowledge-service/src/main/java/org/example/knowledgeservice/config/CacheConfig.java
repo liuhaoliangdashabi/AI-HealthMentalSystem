@@ -38,6 +38,7 @@ public class CacheConfig implements CachingConfigurer {
 
         RedisCacheConfiguration cfg = RedisCacheConfiguration.defaultCacheConfig()
                 .entryTtl(Duration.ofMinutes(30+ThreadLocalRandom.current().nextInt(10)))
+                .computePrefixWith(cacheName->"ks:"+cacheName+"::")
                 // key 用纯字符串：redis-cli 里看到的是 article::42 这种，肉眼可读
                 .serializeKeysWith(RedisSerializationContext.SerializationPair
                         .fromSerializer(new StringRedisSerializer()))

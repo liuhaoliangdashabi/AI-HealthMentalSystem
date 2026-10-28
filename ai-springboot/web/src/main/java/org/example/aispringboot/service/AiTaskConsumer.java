@@ -54,14 +54,26 @@ public class AiTaskConsumer {
     @SuppressWarnings("unchecked")
     @Scheduled(fixedDelay=800)
     public void consumeAiTask(){
-        List<MapRecord<String,Object,Object>> records=
-                redis.opsForStream().read(
-                      Consumer.from(RedisKeys.AI_TASK_GROUP,consumerName),
-                      StreamReadOptions.empty().count(10),
-                      StreamOffset.create(RedisKeys.AI_TASK_STREAM,ReadOffset.lastConsumed())
-                );
-        if(records==null)return;
-        handleRecord(records);
+        try {
+            List<MapRecord<String,Object,Object>> records=
+                    redis.opsForStream().read(
+                          Consumer.from(RedisKeys.AI_TASK_GROUP,consumerName),
+                          StreamReadOptions.empty().count(10),
+                          StreamOffset.create(RedisKeys.AI_TASK_STREAM,ReadOffset.lastConsumed())
+                    );
+            if(records==null)return;
+            handleRecord(records);
+        } catch (Exception e) {
+            if(isNoGroup(e)){
+                log.warn("消费者组不存在(Redis可能被清空)，重建组{}",RedisKeys.AI_TASK_GROUP);
+                try{
+                    redis.opsForStream().createGroup(RedisKeys.AI_TASK_STREAM,
+                            ReadOffset.from("0"),RedisKeys.AI_TASK_GROUP);
+                }catch(Exception ignore){}
+            }else{
+                log.warn("读取AI任务流失败，本轮跳过",e);
+            }
+        }
     }
 
     @Scheduled(fixedDelay = 30000)
@@ -236,5 +248,12 @@ public class AiTaskConsumer {
         } catch (Exception e) {
             log.warn("{}消息已处理，但签收失败，留在PEL被重投", desc, e);
         }
+    }
+
+    private boolean isNoGroup(Throwable e){
+        for(Throwable t=e;t!=null;t=t.getCause()){
+            if(t.getMessage()!=null && t.getMessage().contains("NOGROUP"))return true;
+        }
+        return false;
     }
 }
