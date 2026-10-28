@@ -17,6 +17,7 @@
         </processorPath>
         <module name="common" />
         <module name="web" />
+        <module name="gateway" />
         <module name="knowledge-service" />
       </profile>
     </annotationProcessing>
@@ -26,6 +27,7 @@
     <option name="ADDITIONAL_OPTIONS_OVERRIDE">
       <module name="ai-springboot" options="-parameters" />
       <module name="common" options="-parameters" />
+      <module name="gateway" options="-parameters" />
       <module name="knowledge-service" options="-parameters" />
       <module name="web" options="-parameters" />
     </option>
