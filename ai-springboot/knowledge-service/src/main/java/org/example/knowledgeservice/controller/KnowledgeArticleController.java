@@ -7,6 +7,7 @@ import org.example.common.Result;
 import org.example.knowledgeservice.DTO.command.ArticlePageQueryDTO;
 import org.example.knowledgeservice.DTO.response.ArticleResponseDTO;
 import org.example.knowledgeservice.service.KnowledgeArticleService;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -41,5 +42,41 @@ public class KnowledgeArticleController {
             @RequestHeader(value="X-User-Role",required=false)Integer roleType){
         log.debug("role={}查询文章热度列表",roleType);
         return Result.success(articleService.getHotArticle());
+    }
+
+    //今天还没来得及改，明天继续
+    @PostMapping("/knowledge/article")
+    public Result<Void> createArticle(
+            @Valid @RequestBody ArticleCommandDTO commandDTO,
+            @AuthenticationPrincipal UserLoginResponseDTO.UserDetailResponseDTO user){
+        log.debug("Id={}新建文章",user.getId());
+//        String username=user.getUsername().isBlank()?
+//                user.getEmail():user.getUsername();
+        articleService.createArticle(commandDTO,user.getId());
+        return Result.success();
+    }
+
+    @PutMapping("/knowledge/article/{id}/status")
+    public Result<Void> putArticleStatus(@PathVariable("id") String articleId,@Valid @RequestBody ArticleStatusCommandDTO status,
+                                         @AuthenticationPrincipal UserLoginResponseDTO.UserDetailResponseDTO user){
+        log.debug("Id={}修改文章状态",user.getId());
+        articleService.putArticleStatus(articleId,status);
+        return Result.success();
+    }
+
+    @PutMapping("/knowledge/article/{id}")
+    public Result<Void> updateArticleDetail(@PathVariable String id,
+                                            @Valid @RequestBody ArticleCommandDTO commandDTO,
+                                            @AuthenticationPrincipal UserLoginResponseDTO.UserDetailResponseDTO user){
+        log.debug("Id={}修改文章articleId={}详情",user.getId(),id);
+        articleService.putArticleDetail(id,commandDTO);
+        return Result.success();
+    }
+    @DeleteMapping("/knowledge/article/{id}")
+    public Result<Void> deleteArticle(@PathVariable String id,
+                                      @AuthenticationPrincipal UserLoginResponseDTO.UserDetailResponseDTO user){
+        log.debug("Id={}要删除articleId={}",user.getId(),id);
+        articleService.deleteArticle(id);
+        return Result.success();
     }
 }

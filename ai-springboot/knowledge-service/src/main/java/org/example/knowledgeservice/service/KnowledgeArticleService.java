@@ -101,11 +101,12 @@ public class KnowledgeArticleService {
         return page.convert(a->dtoMap.get(a.getId()));
     }
 
-    public void createArticle(@Valid ArticleCommandDTO commandDTO, Long id) {
+    public void createArticle(@Valid ArticleCommandDTO commandDTO, Long userId,String userName) {
+        log.warn("userId={}新增文章进分组categoryId={}",userId,commandDTO.getCategoryId());
         if(categoryMapper.selectById(commandDTO.getCategoryId())==null){
             throw new BusinessException(commandDTO.getCategoryId()+"分类不存在");
         }
-        KnowledgeArticle article= KnowledgeConvert.commandToEntity(commandDTO,id);
+        KnowledgeArticle article= KnowledgeConvert.commandToEntity(commandDTO,userId,userName);
         articleMapper.insert(article);
     }
 

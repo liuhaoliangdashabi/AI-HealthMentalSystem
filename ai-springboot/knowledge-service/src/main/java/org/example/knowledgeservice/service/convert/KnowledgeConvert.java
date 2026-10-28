@@ -42,7 +42,8 @@ public class KnowledgeConvert {
                 .build();
     }
 
-    public static KnowledgeArticle commandToEntity(ArticleCommandDTO cmd, Long authorId){
+    public static KnowledgeArticle commandToEntity(ArticleCommandDTO cmd,
+                                                   Long authorId,String authorName){
         return KnowledgeArticle.builder()
                 .title(cmd.getTitle())
                 .content(cmd.getContent())
@@ -51,6 +52,7 @@ public class KnowledgeConvert {
                 .summary(cmd.getSummary())
                 .tags(cmd.getTags())
                 .authorId(authorId)                       // ← 从 token 拿的
+                .authorName(authorName)
                 .readCount(0)                             // ← 新文章从 0 开始
                 .status(ArticleStatus.DRAFT.getCode())    // ← 新文章一律草稿
                 .createdAt(LocalDateTime.now())
