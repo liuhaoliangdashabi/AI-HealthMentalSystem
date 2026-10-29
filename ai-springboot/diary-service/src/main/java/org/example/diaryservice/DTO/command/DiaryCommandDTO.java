@@ -1,5 +1,6 @@
 package org.example.diaryservice.DTO.command;
 
+import jakarta.validation.constraints.*;
 import lombok.Data;
 
 import java.time.LocalDate;

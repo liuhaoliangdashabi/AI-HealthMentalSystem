@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import jakarta.validation.constraints.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -23,45 +24,32 @@ public class EmotionDiary {
     private Long id;
 
     //Long 类型要用 @NotNull
-    @NotNull(message = "用户不能为空")
     @TableField("user_id")
     private Long userId;
 
     //数据库有 UNIQUE(user_id, diary_date)——一个用户一天只能写一篇
-    @NotNull(message = "日记日期不能为空")
-    @PastOrPresent(message = "日记日期不能是将来日期")
     @TableField("diary_date")
     private LocalDate diaryDate;
 
     //情绪评分 1~10
-    @NotNull(message = "情绪评分不能为空")
-    @Min(value = 1, message = "情绪评分最低为1")
-    @Max(value = 10, message = "情绪评分最高为10")
     @TableField("mood_score")
     private Integer moodScore;
 
     //主要情绪，如 "焦虑"
     @TableField("dominant_emotion")
-    @Size(max = 50,message = "主要情绪不能超过50个字符")
     private String dominantEmotion;
 
-    @Size(max = 300, message = "情绪触发因素不能超过300个字符")
     @TableField("emotion_triggers")
     private String emotionTriggers;
 
-    @Size(max = 300, message = "日记内容不能超过300个字符")
     @TableField("diary_content")
     private String diaryContent;
 
     //睡眠质量 1~5
-    @Min(value = 1, message = "睡眠质量最低为1")
-    @Max(value = 5, message = "睡眠质量最高为5")
     @TableField("sleep_quality")
     private Integer sleepQuality;
 
     //压力水平 1~5
-    @Min(value = 1, message = "压力水平最低为1")
-    @Max(value = 5, message = "压力水平最高为5")
     @TableField("stress_level")
     private Integer stressLevel;
 

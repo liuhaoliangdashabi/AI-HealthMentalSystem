@@ -1,0 +1,42 @@
+server:
+  port: 8030
+
+spring:
+  application:
+    name: diary-service
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+  cloud:
+    nacos:
+      config:
+        server-addr: 127.0.0.1:8848
+        namespace: dev
+        group: dev
+      discovery:
+        server-addr: 127.0.0.1:8848
+        namespace: dev
+        group: dev
+  config:
+    import:
+      - optional:nacos:diary-service.yaml
+  data:
+    redis:
+      sentinel:
+        master: mymaster
+        nodes: 127.0.0.1:26379
+      timeout: 3000ms
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/mental_health_diary?characterEncoding=utf-8&useSSL=false&allowPublicKeyRetrieval=true&timeZone=Asia/Shanghai
+    username: root
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: org.example.diaryservice.entity
+
+oss:
+  region: cn-beijing
+  bucket: mental-health-ai-assistant

@@ -15,6 +15,10 @@ spring:
               uri: lb://knowledge-service
               predicates:
                 - Path=/api/knowledge/**
+            - id: diary-service
+              uri: lb://diary-service
+              predicates:
+                - Path=/api/emotion-diary/**
             - id: web
               uri: http://127.0.0.1:8080
               predicates:
