@@ -31,13 +31,6 @@ import java.util.stream.Collectors;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
-
-    private ResponseEntity<Result<?>> json(Result<?> body){
-        return ResponseEntity.ok()
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(body);
-    }
-
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Result<?>> handleMethodArgumentNotValid(MethodArgumentNotValidException e){
         String message=e.getBindingResult().getFieldErrors().stream()
@@ -193,9 +186,9 @@ public class GlobalExceptionHandler {
     }
 
 
-    //堆栈精简：只保留异常名、消息、本项目的调用帧和 Caused by 链，框架内部的几百行不打了
+    //堆栈精简：只保留异常名、消息、本项目的调用帧和Caused by链
 
-    private static final String APP_PACKAGE="org.example.aispringboot";
+    private static final String APP_PACKAGE="org.example";
     private static final int MAX_CAUSE_DEPTH=5;   //最多跟几层 Caused by
     private static final int MAX_FRAMES=8;        //每层最多打几帧
 
@@ -223,5 +216,11 @@ public class GlobalExceptionHandler {
             current=current.getCause();
         }
         return sb.toString();
+    }
+
+    private ResponseEntity<Result<?>> json(Result<?> body){
+        return ResponseEntity.status(ResultCode.of(body.getCode()).getHttpStatus())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(body);
     }
 }

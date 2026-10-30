@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.extern.slf4j.Slf4j;
 import org.example.common.BusinessException;
+import org.example.common.ResultCode;
 import org.example.diaryservice.DTO.command.DiaryCommandDTO;
 import org.example.diaryservice.DTO.command.DiaryPageQueryDTO;
 import org.example.diaryservice.DTO.response.DiaryResponseDTO;
@@ -66,15 +67,27 @@ public class DiaryService {
         });
     }
 
+    /**
+     * 删除日记。先查再删，因为 delete 的返回值分不清三件事：
+     * ① 记录真的不存在（前端传了错的 id，是 bug，error 级）
+     * ② 记录存在但不是你的（越权尝试，属安全事件，warn 级，不惊动运维）
+     * ③ 查到之后被别人删了（并发，error 级）
+     */
     public void deleteEmotionDiary(Long diaryId,Long userId,boolean isAdmin) {
-        LambdaQueryWrapper<EmotionDiary> qw=new LambdaQueryWrapper<EmotionDiary>()
-                .eq(EmotionDiary::getId,diaryId);
-        if(!isAdmin){
-            qw.eq(EmotionDiary::getUserId,userId);
+        EmotionDiary diary=emotionDiaryMapper.selectById(diaryId);
+        if(diary==null){
+            log.error("删除失败：日记不存在，diaryId={}，操作者userId={}，isAdmin={}",diaryId,userId,isAdmin);
+            throw new BusinessException("日记不存在");
         }
-        if(emotionDiaryMapper.delete(qw)==0){
-            log.warn("要删的数据不存在，diaryId={}",diaryId);
-            throw new BusinessException("要删除的数据不存在");
+        //越权判断：userId 可能是 null（绕过网关直连），Objects.equals 不会 NPE
+        if(!isAdmin && !Objects.equals(diary.getUserId(),userId)){
+            log.warn("越权删除被拦截：diaryId={} 属于userId={}，操作者userId={}，isAdmin={}",
+                    diaryId,diary.getUserId(),userId,isAdmin);
+            throw new BusinessException(ResultCode.AUTHORIZED_ERROR.getCode(),"无权操作他人的日记",null);
+        }
+        if(emotionDiaryMapper.deleteById(diaryId)==0){
+            log.error("删除失败：查询到但删除影响 0 行，疑似并发删除，diaryId={}，操作者userId={}",diaryId,userId);
+            throw new BusinessException("日记不存在");
         }
     }
 

@@ -20,7 +20,7 @@ import org.springframework.lang.Nullable;
 import java.time.Duration;
 import java.util.concurrent.ThreadLocalRandom;
 
-/** 注解流缓存配置，注解写在 KnowledgeArticleService 上。 */
+/** 注解流缓存配置。知识域已迁到 knowledge-service（那边有自己的一份，前缀 ks:），这里只服务 web 自己的缓存（analytics 等）。 */
 @Slf4j
 @Configuration
 @EnableCaching   //没有它，所有 @Cacheable/@CacheEvict 都不生效
@@ -41,7 +41,7 @@ public class CacheConfig implements CachingConfigurer {
                 // key 用纯字符串：redis-cli 里看到的是 article::42 这种，肉眼可读
                 .serializeKeysWith(RedisSerializationContext.SerializationPair
                         .fromSerializer(new StringRedisSerializer()))
-                // value 用 JSON：ArticleResponseDTO 是对象，必须能还原类型
+                // value 用 JSON：缓存的是对象，必须能还原类型
                 .serializeValuesWith(RedisSerializationContext.SerializationPair
                         .fromSerializer(json));
 
