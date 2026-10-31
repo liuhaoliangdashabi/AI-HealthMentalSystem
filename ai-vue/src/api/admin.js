@@ -51,11 +51,12 @@ export function getSessionDetail(sessionId){
 }
 
 export function getEmotionalPage(params){
-    return service.get('/emotion-diary/admin/page',{params})
+    //D7 起日记域不再区分 admin 路径，B/C 端共用 /emotion-diary/page，由后端按 X-User-Role 决定看谁的
+    return service.get('/emotion-diary/page',{params})
 }
 
 export function deleteEmotional(id){
-    return service.delete(`/emotion-diary/admin/${id}`)
+    return service.delete(`/emotion-diary/${id}`)
 }
 
 //手动触发一篇日记的 AI 分析（给上线前的老日记补算用）

@@ -1,0 +1,59 @@
+server:
+  port: 8040
+
+spring:
+  application:
+    name: consult-service
+  ai:
+    openai:
+      chat:
+        options:
+          model: deepseek-ai/DeepSeek-V3
+          tool-calling:
+            enabled: true
+        completions-path: /v1/chat/completions
+      api-key: ${API_KEY}
+      base-url: https://api.siliconflow.cn
+    model:
+      embedding: none
+      image: none
+      moderation: none
+      audio:
+        speech: none
+        transcription: none
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+  cloud:
+    nacos:
+      config:
+        server-addr: 127.0.0.1:8848
+        namespace: dev
+        group: dev
+      discovery:
+        server-addr: 127.0.0.1:8848
+        namespace: dev
+        group: dev
+  config:
+    import:
+      - optional:nacos:consult-service.yaml
+  data:
+    redis:
+      sentinel:
+        master: mymaster
+        nodes: 127.0.0.1:26379
+      timeout: 3000ms
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/mental_health_consult?characterEncoding=utf-8&useSSL=false&allowPublicKeyRetrieval=true&timeZone=Asia/Shanghai
+    username: root
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: org.example.consultservice.entity
+
+oss:
+  region: cn-beijing
+  bucket: mental-health-ai-assistant

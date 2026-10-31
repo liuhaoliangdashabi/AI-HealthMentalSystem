@@ -2,7 +2,6 @@ package org.example.gateway;
 
 import com.auth0.jwt.JWT;
 import com.auth0.jwt.algorithms.Algorithm;
-import com.auth0.jwt.exceptions.JWTVerificationException;
 import com.auth0.jwt.interfaces.DecodedJWT;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
@@ -18,6 +17,11 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+
+import static org.example.common.util.IdentityUtil.HEADER_USER_ID;
+import static org.example.common.util.IdentityUtil.HEADER_USER_NAME;
+import static org.example.common.util.IdentityUtil.HEADER_USER_ROLE;
+
 @Component
 public class AuthGlobalFilter implements GlobalFilter, Ordered {
 
@@ -43,9 +47,16 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
             DecodedJWT jwt=JWT.require(Algorithm.HMAC256(secret))
                     .withIssuer(ISSUER).build().verify(token);
             ServerHttpRequest newReq=exchange.getRequest().mutate()
-                    .header("X-User-Id", String.valueOf(jwt.getClaim("userId").asLong()))
-                    .header("X-User-Role", String.valueOf(jwt.getClaim("roleType").asInt()))
-                    .header("X-User-Name",jwt.getClaim("username").asString())
+                    //先把客户端自带的身份头全部作废，再注入 token 解出来的值。
+                    //不这么做的话，调用方自己塞一个 X-User-Role: 2 就能冒充管理员
+                    .headers(h->{
+                        h.remove(HEADER_USER_ID);
+                        h.remove(HEADER_USER_ROLE);
+                        h.remove(HEADER_USER_NAME);
+                    })
+                    .header(HEADER_USER_ID, String.valueOf(jwt.getClaim("userId").asLong()))
+                    .header(HEADER_USER_ROLE, String.valueOf(jwt.getClaim("roleType").asInt()))
+                    .header(HEADER_USER_NAME,jwt.getClaim("username").asString())
                     .build();
             return chain.filter(exchange.mutate().request(newReq).build());
         } catch (Exception e) {

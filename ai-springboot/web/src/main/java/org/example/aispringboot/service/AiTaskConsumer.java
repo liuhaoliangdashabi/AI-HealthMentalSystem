@@ -178,13 +178,12 @@ public class AiTaskConsumer {
             try {
                 switch (type) {
                     case "DIARY_ANALYSIS" -> {
-                        Long diaryId = readLong(record, "diaryId");
-                        if (diaryId == null) {
-                            discardPoison(record, "diaryId 缺失或不是数字");
-                            continue;
-                        }
-                        ok = analysisService.analyzeDiary(diaryId);
-                        desc = "diaryId=" + diaryId;
+                        //D8 起日记分析归 diary-service（diary-workers 组）消费。
+                        //这里必须主动签收丢掉，否则这条消息会挂在 web 的 PEL 里被反复重投，
+                        //每次都去 assistant 库旧表查一遍，然后刷一行"日记不存在，跳过分析"
+                        log.debug("日记任务已交由 diary-service 处理，web 侧跳过，recordId={}", record.getId());
+                        acknowledge(record, "跳过 DIARY_ANALYSIS");
+                        continue;
                     }
                     case "EMOTION_ANALYSIS" -> {
                         Long sessionId = readLong(record, "sessionId");

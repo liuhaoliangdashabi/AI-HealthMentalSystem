@@ -3,7 +3,10 @@ package org.example.knowledgeservice;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
+import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
+@EnableScheduling
 @SpringBootApplication(scanBasePackages = {"org.example.knowledgeservice","org.example.common"})
 @EnableDiscoveryClient
 public class KnowledgeServiceApplication {

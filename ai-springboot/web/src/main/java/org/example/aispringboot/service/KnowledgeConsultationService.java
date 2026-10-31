@@ -5,10 +5,10 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.extern.slf4j.Slf4j;
+import org.example.aicommon.dto.SessionEmotionResponseDTO;
 import org.example.aispringboot.DTO.command.ConsultationPageQueryDTO;
 import org.example.aispringboot.DTO.response.ConsultationMessageResponseDTO;
 import org.example.aispringboot.DTO.response.ConsultationSessionResponseDTO;
-import org.example.aispringboot.DTO.response.SessionEmotionResponseDTO;
 import org.example.aispringboot.DTO.response.UserLoginResponseDTO;
 import org.example.aispringboot.entity.ConsultationMessage;
 import org.example.aispringboot.entity.ConsultationSession;
@@ -169,3 +169,4 @@ public class KnowledgeConsultationService {
         }
     }
 }
+

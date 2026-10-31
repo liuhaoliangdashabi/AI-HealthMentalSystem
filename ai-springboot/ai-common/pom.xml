@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- 必须挂项目父 pom，不能挂 spring-boot-starter-parent：
+         项目用的是 Spring Boot 3.5.15，Initializr 默认给的是 4.x，两个大版本不兼容 -->
+    <parent>
+        <groupId>org.example</groupId>
+        <artifactId>ai-mental-health</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>ai-common</artifactId>
+
+    <properties>
+        <java.version>17</java.version>
+    </properties>
+
+    <dependencies>
+        <!-- ChatClient / OpenAiChatModel 在这里 -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-model-openai</artifactId>
+            <version>${spring-ai.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+    </dependencies>
+
+    <!-- 故意不写 spring-boot-maven-plugin：
+         那是给可执行服务用的，会把 jar repackage 成 boot jar，
+         别的模块依赖它时取不到普通类。库模块只要普通 jar。 -->
+</project>

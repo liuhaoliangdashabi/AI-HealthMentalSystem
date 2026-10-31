@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.example.common.Result;
+import org.example.common.annotation.RequireIdentity;
 import org.example.knowledgeservice.DTO.command.ArticleCommandDTO;
 import org.example.knowledgeservice.DTO.command.ArticlePageQueryDTO;
 import org.example.knowledgeservice.DTO.command.ArticleStatusCommandDTO;
@@ -45,7 +46,7 @@ public class KnowledgeArticleController {
         return Result.success(articleService.getHotArticle());
     }
 
-    //今天还没来得及改，明天继续
+    @RequireIdentity(adminOnly = true)
     @PostMapping("/knowledge/article")
     public Result<Void> createArticle(
             @Valid @RequestBody ArticleCommandDTO commandDTO,
@@ -58,6 +59,7 @@ public class KnowledgeArticleController {
         return Result.success();
     }
 
+    @RequireIdentity(adminOnly = true)
     @PutMapping("/knowledge/article/{id}/status")
     public Result<Void> putArticleStatus(@PathVariable("id") String articleId,@Valid @RequestBody ArticleStatusCommandDTO status,
                                          @RequestHeader(value="X-User-Id",required=false)Long userId,
@@ -67,6 +69,7 @@ public class KnowledgeArticleController {
         return Result.success();
     }
 
+    @RequireIdentity(adminOnly = true)
     @PutMapping("/knowledge/article/{id}")
     public Result<Void> updateArticleDetail(@PathVariable String id,
                                             @Valid @RequestBody ArticleCommandDTO commandDTO,
@@ -75,6 +78,7 @@ public class KnowledgeArticleController {
         articleService.putArticleDetail(id,commandDTO);
         return Result.success();
     }
+    @RequireIdentity(adminOnly = true)
     @DeleteMapping("/knowledge/article/{id}")
     public Result<Void> deleteArticle(@PathVariable String id,
                                       @RequestHeader(value="X-User-Id",required=false)Long userId){

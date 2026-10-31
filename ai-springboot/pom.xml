@@ -17,9 +17,11 @@
     <modules>
         <module>web</module>
         <module>common</module>
+        <module>ai-common</module>
         <module>knowledge-service</module>
         <module>diary-service</module>
         <module>gateway</module>
+        <module>consult-service</module>
     </modules>
 
     <properties>
@@ -54,6 +56,12 @@
             <dependency>
                 <groupId>org.example</groupId>
                 <artifactId>common</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.example</groupId>
+                <artifactId>ai-common</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>

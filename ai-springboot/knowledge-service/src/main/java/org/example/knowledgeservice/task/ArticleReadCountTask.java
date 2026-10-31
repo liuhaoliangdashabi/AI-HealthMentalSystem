@@ -1,10 +1,10 @@
-package org.example.aispringboot.common;
+package org.example.knowledgeservice.task;
 
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import lombok.extern.slf4j.Slf4j;
-import org.example.aispringboot.entity.KnowledgeArticle;
-import org.example.aispringboot.mapper.KnowledgeArticleMapper;
-import org.example.aispringboot.util.RedisKeys;
+import org.example.knowledgeservice.entity.KnowledgeArticle;
+import org.example.knowledgeservice.mapper.KnowledgeArticleMapper;
+import org.example.knowledgeservice.util.RedisKeys;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;

@@ -28,6 +28,12 @@ public class RedisKeys {
     //消费者组名：逻辑身份，永远不变。实例身份用 consumerName 区分
     public static final String AI_TASK_GROUP="ai-workers";
 
+    //8030 自己的组名。和 web 的 ai-workers 是两个独立 group，各有独立 PEL。
+    //同一条 Stream 上两种 type 混着放，两个 group 都会读到全部消息，
+    //各自只处理自己的 type，遇到别人的直接在本地 ACK 丢掉 —— 这不叫"重复消费"，
+    //因为被丢掉的那条本来就不归它管。真正的重复消费是指同一 type 被处理两次。
+    public static final String DIARY_TASK_GROUP="diary-workers";
+
     //========== AI 情绪分析结果缓存（String + JSON）==========
 
     //这是前缀不是完整 key，末尾必须有冒号，后面要拼 md5

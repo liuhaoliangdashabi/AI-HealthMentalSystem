@@ -4,6 +4,24 @@ server:
 spring:
   application:
     name: diary-service
+  # D8：日记 AI 分析。跟 web 保持同一套模型配置，改模型要两边一起改
+  ai:
+    openai:
+      chat:
+        options:
+          model: deepseek-ai/DeepSeek-V3
+          tool-calling:
+            enabled: true
+        completions-path: /v1/chat/completions
+      api-key: ${API_KEY}
+      base-url: https://api.siliconflow.cn
+    model:
+      embedding: none
+      image: none
+      moderation: none
+      audio:
+        speech: none
+        transcription: none
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration

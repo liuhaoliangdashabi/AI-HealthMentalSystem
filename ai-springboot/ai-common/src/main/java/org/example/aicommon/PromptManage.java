@@ -1,6 +1,11 @@
-package org.example.aispringboot.AiService;
+package org.example.aicommon;
 
+/**
+ * 所有给模型的提示词，两个服务共用一份。
+ * 改 prompt 只改这里，web 的心理咨询和 diary-service 的日记分析都会跟着变。
+ */
 public class PromptManage {
+
     public static final String PSYCHOLOGICAL_SUPPORT_SYSTEM_PROMPT =
             "你是一位专业、温暖、有同理心的AI心理健康助手，专门为大学生提供心理支持和情感疏导。\n" +
                     "\n你的角色特点：\n" +
@@ -25,6 +30,7 @@ public class PromptManage {
                     "- 可以适当使用表情符号增加亲和力\n" +
                     "- 结合大学生的生活场景给出建议\n" +
                     "\n重要：请全程使用简体中文(Chinese)进行温暖的交流和回复。";
+
     public static final String EMOTION_ANALYSIS_SYSTEM_PROMPT =
             "你是一个情绪分析器。阅读给定的心理咨询对话，判断【用户】当前的情绪状态。\n" +
                     "只输出 JSON，不要解释、不要 markdown 代码块。字段含义：\n" +
@@ -35,5 +41,4 @@ public class PromptManage {
                     "- suggestion: 给用户的一句话小建议\n" +
                     "- riskDescription: 风险描述，正常时留空字符串\n" +
                     "- improvementSuggestions: 2-3 条具体的治愈小行动";
-
 }

@@ -7,7 +7,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 
 @EnableAsync
 @EnableScheduling
-@SpringBootApplication(scanBasePackages = {"org.example.aispringboot","org.example.common"})
+@SpringBootApplication(scanBasePackages = {"org.example.aispringboot","org.example.common","org.example.aicommon"})
 public class AiSpringbootApplication {
 
     public static void main(String[] args) {

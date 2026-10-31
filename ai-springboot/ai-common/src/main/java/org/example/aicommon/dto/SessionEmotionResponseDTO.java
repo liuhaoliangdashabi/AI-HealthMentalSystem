@@ -1,4 +1,4 @@
-package org.example.aispringboot.DTO.response;
+package org.example.aicommon.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -7,6 +7,10 @@ import lombok.NoArgsConstructor;
 
 import java.util.List;
 
+/**
+ * 模型返回的结构化情绪结果，web 的会话分析和 diary-service 的日记分析共用。
+ * 名字带 Session 是历史包袱，两个域都用这套字段，改名会牵动两边，先不动。
+ */
 @Data
 @Builder
 @NoArgsConstructor
