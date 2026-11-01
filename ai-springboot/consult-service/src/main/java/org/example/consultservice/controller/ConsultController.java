@@ -8,6 +8,7 @@ import org.example.aicommon.dto.SessionEmotionResponseDTO;
 import org.example.common.BusinessException;
 import org.example.common.Result;
 import org.example.common.ResultCode;
+import org.example.common.annotation.RequireIdentity;
 import org.example.consultservice.AiService.StructOutPut;
 import org.example.consultservice.DTO.command.ConsultationPageQueryDTO;
 import org.example.consultservice.DTO.command.ConsultationSectionCreateDTO;
@@ -39,6 +40,7 @@ public class ConsultController {
 
     //-------------------------------------会话列表详情
 
+    @RequireIdentity
     @GetMapping("/sessions")
     public Result<IPage<ConsultationSessionResponseDTO>> getSessionList(
             @Valid ConsultationPageQueryDTO query,
@@ -49,6 +51,7 @@ public class ConsultController {
         return Result.success(consultationService.getConsultationPage(query,roleType,userId));
     }
 
+    @RequireIdentity
     @GetMapping("/sessions/{sessionId}/messages")
     public Result<List<ConsultationMessageResponseDTO>> getSessionDetail(
             @PathVariable Long sessionId,
@@ -60,6 +63,7 @@ public class ConsultController {
 
     //-------------------------------------C端专用
 
+    @RequireIdentity
     @PostMapping("/session/start")
     public Result<StructOutPut.StreamChatSession> startSession(@Valid @RequestBody ConsultationSectionCreateDTO createDTO,
                                                                @RequestHeader(value=HEADER_USER_ID,required = false)Long userId){
@@ -67,6 +71,7 @@ public class ConsultController {
         return Result.success(session);
     }
 
+    @RequireIdentity
     @PostMapping(value="/stream",produces = MediaType.TEXT_EVENT_STREAM_VALUE)//produces定义返回类型
     public Flux<ServerSentEvent<String>> streamChat(@Valid @RequestBody ConsultationStreamDTO streamDTO,
                                                     @RequestHeader(value=HEADER_USER_ID)Long userId){
@@ -108,6 +113,7 @@ public class ConsultController {
                 .delayElements(Duration.ofMillis(10));
     }
 
+    @RequireIdentity
     @DeleteMapping("/sessions/{id}")
     public Result<Void> deleteSession(@PathVariable("id") Long sessionId,
                                       @RequestHeader(value=HEADER_USER_ID,required = false)Long userId,
@@ -117,6 +123,7 @@ public class ConsultController {
         return Result.success();
     }
 
+    @RequireIdentity
     @GetMapping("/session/{sessionId}/emotion")
     public Result<SessionEmotionResponseDTO> getSessionEmotion(
             @PathVariable String sessionId,

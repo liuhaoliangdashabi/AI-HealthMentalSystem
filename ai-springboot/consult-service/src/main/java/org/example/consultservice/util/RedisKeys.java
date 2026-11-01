@@ -27,6 +27,7 @@ public class RedisKeys {
 
     //消费者组名：逻辑身份，永远不变。实例身份用 consumerName 区分
     public static final String AI_TASK_GROUP="ai-workers";
+    public static final String CONSULT_TASK_GROUP="consult-workers";
 
     //8030 自己的组名。和 web 的 ai-workers 是两个独立 group，各有独立 PEL。
     //同一条 Stream 上两种 type 混着放，两个 group 都会读到全部消息，

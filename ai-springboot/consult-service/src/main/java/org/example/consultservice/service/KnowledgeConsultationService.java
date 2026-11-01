@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.example.aicommon.dto.SessionEmotionResponseDTO;
 
 import org.example.common.BusinessException;
+import org.example.common.ResultCode;
 import org.example.common.util.IdentityUtil;
 import org.example.consultservice.DTO.command.ConsultationPageQueryDTO;
 import org.example.consultservice.DTO.response.ConsultationMessageResponseDTO;
@@ -40,6 +41,7 @@ public class KnowledgeConsultationService {
     public IPage<ConsultationSessionResponseDTO> getConsultationPage(ConsultationPageQueryDTO query,
                                                                      Integer userType,
                                                                      Long userId){
+        if(!IdentityUtil.isAdmin(userType) && userId==null)throw new BusinessException(ResultCode.UNAUTHORIZED);
         Long scopeUserId = IdentityUtil.isAdmin(userType) ? null : userId;   // null 表示不限制
 
         Page<ConsultationSession> page = new Page<>(query.getCurrentPage(), query.getSize());
@@ -165,7 +167,7 @@ public class KnowledgeConsultationService {
         boolean isAdmin=IdentityUtil.isAdmin(userType);
         if(!isAdmin && !session.getUserId().equals(userId)){
             log.warn("userId={},userType={}不是该次会话的参与者，无权访问该会话",userId,userType);
-            throw new BusinessException("用户无权访问该会话");
+            throw new BusinessException(ResultCode.AUTHORIZED_ERROR.getCode(),"用户无权访问该会话",null);
         }
     }
 }

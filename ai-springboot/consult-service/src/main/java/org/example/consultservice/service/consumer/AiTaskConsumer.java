@@ -27,7 +27,7 @@ public class AiTaskConsumer {
     private EmotionAnalysisService analysisService;
 
     //组名是逻辑身份（RedisKeys 里固定），实例身份靠这个名字区分
-    private static final String consumerName="work-"+ UUID.randomUUID();
+    private static final String consumerName="consult-8040-0";
     private static final Duration STALE_SECONDS=Duration.ofSeconds(60);
     private static final int MAX_RETRY=3;
 
