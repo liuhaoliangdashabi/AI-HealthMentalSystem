@@ -135,6 +135,21 @@ public class KnowledgeConsultationService {
         }
         checkAccess(session,userType,userId);
 
+        ConsultationMessage latest=messageMapper.selectOne(
+                new LambdaQueryWrapper<ConsultationMessage>()
+                        .eq(ConsultationMessage::getSessionId,sessionId)
+                        .orderByDesc(ConsultationMessage::getId)
+                        .last("limit 1")
+        );
+        if(latest!=null && latest.getCreatedAt()!=null &&
+                (session.getLastEmotionUpdatedAt()==null||
+                        session.getLastEmotionUpdatedAt().isBefore(latest.getCreatedAt()))){
+            log.debug("会话{}的情绪结果落后于最新消息，按未分析返回",sessionId);
+            SessionEmotionResponseDTO stale=normalize(SessionEmotionResponseDTO.builder().build());
+            stale.setAnalyzed(false);
+            return stale;
+        }
+
         String json=session.getLastEmotionAnalysis();
         if(json==null || json.isBlank()){
             log.debug("会话{}还没有情绪分析结果",sessionId);

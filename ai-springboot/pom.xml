@@ -22,6 +22,7 @@
         <module>diary-service</module>
         <module>gateway</module>
         <module>consult-service</module>
+        <module>user-service</module>
     </modules>
 
     <properties>

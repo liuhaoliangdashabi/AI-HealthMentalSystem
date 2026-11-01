@@ -1,0 +1,49 @@
+server:
+  port: 8050
+
+spring:
+  application:
+    name: user-service
+  autoconfigure:
+    #common 传递进来了 starter-security，排除它自动生成的默认用户/默认安全链
+    #鉴权统一走网关，服务内部只认网关注入的 X-User-Id
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+  cloud:
+    nacos:
+      config:
+        server-addr: 127.0.0.1:8848
+        namespace: dev
+        group: dev
+      discovery:
+        server-addr: 127.0.0.1:8848
+        namespace: dev
+        group: dev
+  config:
+    import:
+      - optional:nacos:user-service.yaml
+  data:
+    redis:
+      sentinel:
+        master: mymaster
+        nodes: 127.0.0.1:26379
+      timeout: 3000ms
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/mental_health_user?characterEncoding=utf-8&useSSL=false&allowPublicKeyRetrieval=true&timeZone=Asia/Shanghai
+    username: root
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: org.example.userservice.entity
+
+jwt:
+  # 和网关、web 用同一个密钥，否则网关验签过不了
+  secret: ${JWT_SECRET}
+  expiration: 86400000  # 24小时（毫秒）
+  header: token
+
+oss:
+  region: cn-beijing
+  bucket: mental-health-ai-assistant

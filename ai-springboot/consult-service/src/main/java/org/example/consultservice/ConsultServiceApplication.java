@@ -2,7 +2,9 @@ package org.example.consultservice;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
+@EnableScheduling
 @SpringBootApplication(scanBasePackages = {"org.example.consultservice",
         "org.example.common","org.example.aicommon"})
 public class ConsultServiceApplication {

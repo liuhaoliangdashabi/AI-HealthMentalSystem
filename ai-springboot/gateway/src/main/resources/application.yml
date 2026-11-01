@@ -6,11 +6,32 @@ server:
 spring:
   application:
     name: gateway
+  data:
+    # 和 web 用同一套 Redis，黑名单 key 才看得见
+    redis:
+      sentinel:
+        master: mymaster
+        nodes: 127.0.0.1:26379
+      timeout: 3000ms
   cloud:
     gateway:
       server:
         webflux:
           routes:
+            # 老接口兼容：前端还在调 /api/user/activity，但它读的是日记库，归 diary 域。
+            # 必须排在 /api/user/** 前面，否则被 user-service 吃掉报 404
+            - id: user-activity-compat
+              uri: lb://diary-service
+              predicates:
+                - Path=/api/user/activity
+              filters:
+                - RewritePath=/api/user/activity, /api/emotion-diary/activity
+            # /api/user/** 必须排在 id: web 之前，否则被 /api/** 兜底吃掉，永远到不了 8050
+            # /internal/user/** 故意不配路由：那是服务间调用，不该被外网打到
+            - id: user-service
+              uri: lb://user-service
+              predicates:
+                - Path=/api/user/**
             - id: knowledge-service
               uri: lb://knowledge-service
               predicates:

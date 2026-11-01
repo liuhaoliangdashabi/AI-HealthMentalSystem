@@ -5,8 +5,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.example.aispringboot.AiService.EmotionAnalysisService;
 import org.example.aispringboot.util.RedisKeys;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.cache.CacheProperties;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.domain.Range;
 import org.springframework.data.redis.connection.stream.*;
 import org.springframework.data.redis.core.StringRedisTemplate;

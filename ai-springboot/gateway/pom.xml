@@ -45,6 +45,13 @@
             <artifactId>caffeine</artifactId>
         </dependency>
 
+        <!-- 登出后的 token 黑名单在 Redis 里，WebFlux 场景必须用 reactive 版，
+             用普通 RedisTemplate 生成不了 ReactiveStringRedisTemplate -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis-reactive</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.example</groupId>
             <artifactId>common</artifactId>

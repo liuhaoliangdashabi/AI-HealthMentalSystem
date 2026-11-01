@@ -20,6 +20,7 @@
         <module name="common" />
         <module name="web" />
         <module name="knowledge-service" />
+        <module name="user-service" />
         <module name="consult-service" />
         <module name="gateway" />
       </profile>
@@ -35,6 +36,7 @@
       <module name="diary-service" options="-parameters" />
       <module name="gateway" options="-parameters" />
       <module name="knowledge-service" options="-parameters" />
+      <module name="user-service" options="-parameters" />
       <module name="web" options="-parameters" />
     </option>
   </component>

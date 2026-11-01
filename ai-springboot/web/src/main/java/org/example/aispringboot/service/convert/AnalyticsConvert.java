@@ -24,12 +24,12 @@ public class AnalyticsConvert {
                 .build();
     }
 
-    public static AnalyticsOverviewResponseDTO.SystemOverview toSystemOverview(int totalUsers, int activeUsers,
+    public static AnalyticsOverviewResponseDTO.SystemOverview toSystemOverview(long totalUsers, int activeUsers,
                                                                                int totalDiaries, long todayNewDiaries,
                                                                                int totalSessions, long todayNewSessions,
                                                                                Double avgMoodScore) {
         return AnalyticsOverviewResponseDTO.SystemOverview.builder()
-                .totalUsers((long) totalUsers)
+                .totalUsers(totalUsers)
                 .activeUsers((long) activeUsers)
                 .totalDiaries((long) totalDiaries)
                 .todayNewDiaries(todayNewDiaries)
@@ -73,12 +73,12 @@ public class AnalyticsConvert {
 
     //用户活跃度：当天活跃/新增/日记/咨询四类用户数
     public static AnalyticsOverviewResponseDTO.UserActivityItem toUserActivityItem(LocalDate date, Set<Long> activeUsers,
-                                                                                   List<User> newUsers, Set<Long> diaryUsers,
+                                                                                   long newUserCount, Set<Long> diaryUsers,
                                                                                    Set<Long> consultationUsers) {
         return AnalyticsOverviewResponseDTO.UserActivityItem.builder()
                 .date(date.toString())
                 .activeUsers((long) activeUsers.size())
-                .newUsers((long) newUsers.size())
+                .newUsers(newUserCount)
                 .diaryUsers((long) diaryUsers.size())
                 .consultationUsers((long) consultationUsers.size())
                 .build();

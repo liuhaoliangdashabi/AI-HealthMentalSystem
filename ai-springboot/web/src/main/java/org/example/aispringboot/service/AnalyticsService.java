@@ -8,15 +8,14 @@ import org.example.aispringboot.DTO.response.AnalyticsOverviewResponseDTO.DailyT
 import org.example.aispringboot.DTO.response.AnalyticsOverviewResponseDTO.EmotionTrendItem;
 import org.example.aispringboot.DTO.response.AnalyticsOverviewResponseDTO.SystemOverview;
 import org.example.aispringboot.DTO.response.AnalyticsOverviewResponseDTO.UserActivityItem;
+import org.example.aispringboot.DTO.response.UserStatDTO;
 import org.example.aispringboot.DTO.response.UvTrendItem;
 import org.example.aispringboot.entity.ConsultationMessage;
 import org.example.aispringboot.entity.ConsultationSession;
 import org.example.aispringboot.entity.EmotionDiary;
-import org.example.aispringboot.entity.User;
 import org.example.aispringboot.mapper.ConsultationMessageMapper;
 import org.example.aispringboot.mapper.ConsultationSessionMapper;
 import org.example.aispringboot.mapper.EmotionDiaryMapper;
-import org.example.aispringboot.mapper.UserMapper;
 import org.example.aispringboot.service.convert.AnalyticsConvert;
 import org.example.aispringboot.util.RedisKeys;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,7 +36,7 @@ public class AnalyticsService {
     private static final int RECENT_DAYS = 30;
 
     @Autowired
-    private UserMapper userMapper;
+    private UserStatClient userStatClient;
     @Autowired
     private EmotionDiaryMapper emotionDiaryMapper;
     @Autowired
@@ -58,7 +57,8 @@ public class AnalyticsService {
         LocalDate since = today.minusDays(RECENT_DAYS - 1L);
 
         //数据量不大，直接读库全量拉取、在内存里聚合，不写GROUP BY
-        List<User> users = userMapper.selectList(null);
+        //用户表已经搬到 user-service 的库，web 读不到，改为调它的内部接口拿总数和每日新增
+        UserStatDTO userStat = userStatClient.fetch(RECENT_DAYS);
         List<EmotionDiary> diaries = emotionDiaryMapper.selectList(null);
         List<ConsultationSession> sessions = consultationSessionMapper.selectList(null);
         List<ConsultationMessage> messages = consultationMessageMapper.selectList(null);
@@ -94,9 +94,8 @@ public class AnalyticsService {
                 .collect(Collectors.groupingBy(EmotionDiary::getDiaryDate));
         Map<LocalDate, List<ConsultationSession>> sessionsByDate = windowSessions.stream()
                 .collect(Collectors.groupingBy(s -> s.getStartedAt().toLocalDate()));
-        Map<LocalDate, List<User>> newUsersByDate = users.stream()
-                .filter(u -> !u.getCreatedAt().toLocalDate().isBefore(since))
-                .collect(Collectors.groupingBy(u -> u.getCreatedAt().toLocalDate()));
+        Map<LocalDate, Long> newUsersByDate = userStat.getDailyNew().entrySet().stream()
+                .collect(Collectors.toMap(e -> LocalDate.parse(e.getKey()), Map.Entry::getValue));
 
         //补齐30天里没有记录的日期
         List<EmotionTrendItem> emotionTrend = new ArrayList<>();
@@ -121,11 +120,11 @@ public class AnalyticsService {
             emotionTrend.add(AnalyticsConvert.toEmotionTrendItem(d, dayDiaries));
             dailyTrend.add(AnalyticsConvert.toDailyTrendItem(d, daySessions));
             userActivity.add(AnalyticsConvert.toUserActivityItem(d, dayActiveUserIds,
-                    newUsersByDate.getOrDefault(d, List.of()), diaryUserIds, consultationUserIds));
+                    newUsersByDate.getOrDefault(d, 0L), diaryUserIds, consultationUserIds));
         }
 
         SystemOverview systemOverview = AnalyticsConvert.toSystemOverview(
-                users.size(), activeUserIds.size(), diaries.size(), todayNewDiaries,
+                userStat.getTotal(), activeUserIds.size(), diaries.size(), todayNewDiaries,
                 sessions.size(), todayNewSessions, avgMoodScore);
         ConsultationStats consultationStats = AnalyticsConvert.toConsultationStats(
                 sessions.size(), avgDurationMinutes, dailyTrend);
