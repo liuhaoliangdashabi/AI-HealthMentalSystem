@@ -19,7 +19,6 @@ public class ConsultStatDTO {
     public static class Daily{
         private long count;
         private Double avgMoodScore;
-        private List<Long> userIds=new ArrayList<>();
     }
 
     public static ConsultStatDTO empty() {
