@@ -36,7 +36,7 @@ public class AiTaskConsumer {
     private DiaryAnalyzer analysisService;
 
     //组名是逻辑身份（RedisKeys 里固定），实例身份靠这个名字区分
-    private static final String consumerName="diary-"+ UUID.randomUUID();
+    private static final String consumerName="diary-8030-0";
     private static final Duration STALE_SECONDS=Duration.ofSeconds(60);
     private static final int MAX_RETRY=3;
 

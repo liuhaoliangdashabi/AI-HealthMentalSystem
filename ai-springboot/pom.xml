@@ -23,6 +23,7 @@
         <module>gateway</module>
         <module>consult-service</module>
         <module>user-service</module>
+        <module>file-service</module>
     </modules>
 
     <properties>

@@ -40,6 +40,10 @@ spring:
               uri: lb://diary-service
               predicates:
                 - Path=/api/emotion-diary/**
+            - id: file-service
+              uri: lb://file-service
+              predicates:
+                - Path=/api/file/**
             - id: consult-service
               uri: lb://consult-service
               predicates:

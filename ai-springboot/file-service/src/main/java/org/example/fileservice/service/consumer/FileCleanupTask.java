@@ -1,10 +1,10 @@
-package org.example.aispringboot.common;
+package org.example.fileservice.service.consumer;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.extern.slf4j.Slf4j;
-import org.example.aispringboot.entity.SysFileInfo;
-import org.example.aispringboot.mapper.FileMapper;
-import org.example.aispringboot.util.OSSUtil;
+import org.example.fileservice.entity.SysFileInfo;
+import org.example.fileservice.mapper.FileMapper;
+import org.example.fileservice.util.OSSUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;

@@ -3,7 +3,6 @@ package org.example.aispringboot.service.convert;
 import org.example.aispringboot.DTO.response.AnalyticsOverviewResponseDTO;
 import org.example.aispringboot.entity.ConsultationSession;
 import org.example.aispringboot.entity.EmotionDiary;
-import org.example.aispringboot.entity.User;
 
 import java.time.LocalDate;
 import java.util.List;
