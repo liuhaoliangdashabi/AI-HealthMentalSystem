@@ -17,7 +17,7 @@ public class DiaryStatClient {
     public DiaryStatDTO fetch(int days){
         try{
             DiaryStatDTO dto=rest.get()
-                    .uri(baseUrl+"/internal/diary/stat/overview?days="+days)
+                    .uri(baseUrl+"/internal/diary/stats/overview?days="+days)
                     .retrieve()
                     .body(DiaryStatDTO.class);
             return dto==null?DiaryStatDTO.empty():dto;

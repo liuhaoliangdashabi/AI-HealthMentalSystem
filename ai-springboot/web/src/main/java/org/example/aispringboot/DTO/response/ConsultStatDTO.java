@@ -11,7 +11,7 @@ import java.util.Map;
 @Data
 public class ConsultStatDTO {
     private long total;
-    private long today;
+    private long todayNew;
     private Double avgDurationMinutes;
     private Map<String,Daily> daily=new HashMap<>();
 

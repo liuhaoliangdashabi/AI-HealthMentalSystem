@@ -18,7 +18,7 @@ public class ConsultStatClient {
     public ConsultStatDTO fetch(int days){
         try{
             ConsultStatDTO dto=rest.get()
-                    .uri(baseUrl+"/internal/consult/stat/overview?days="+days)
+                    .uri(baseUrl+"/internal/consult/stats/overview?days="+days)
                     .retrieve()
                     .body(ConsultStatDTO.class);
             return dto==null?ConsultStatDTO.empty():dto;

@@ -16,7 +16,7 @@ import static org.example.common.util.IdentityUtil.HEADER_USER_ID;
 
 @Slf4j
 @RestController
-@RequestMapping("/internal/diary/stat")
+@RequestMapping("/internal/diary/stats")
 public class InternalDiaryController{
     @Autowired
     private DiaryStatService diaryStatService;
