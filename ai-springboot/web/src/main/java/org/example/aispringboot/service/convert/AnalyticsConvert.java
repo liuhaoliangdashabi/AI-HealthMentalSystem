@@ -1,6 +1,8 @@
 package org.example.aispringboot.service.convert;
 
 import org.example.aispringboot.DTO.response.AnalyticsOverviewResponseDTO;
+import org.example.aispringboot.DTO.response.ConsultStatDTO;
+import org.example.aispringboot.DTO.response.DiaryStatDTO;
 import org.example.aispringboot.entity.ConsultationSession;
 import org.example.aispringboot.entity.EmotionDiary;
 
@@ -23,26 +25,26 @@ public class AnalyticsConvert {
                 .build();
     }
 
-    public static AnalyticsOverviewResponseDTO.SystemOverview toSystemOverview(long totalUsers, int activeUsers,
-                                                                               int totalDiaries, long todayNewDiaries,
-                                                                               int totalSessions, long todayNewSessions,
+    public static AnalyticsOverviewResponseDTO.SystemOverview toSystemOverview(long totalUsers, long activeUsers,
+                                                                               long totalDiaries, long todayNewDiaries,
+                                                                               long totalSessions, long todayNewSessions,
                                                                                Double avgMoodScore) {
         return AnalyticsOverviewResponseDTO.SystemOverview.builder()
                 .totalUsers(totalUsers)
-                .activeUsers((long) activeUsers)
-                .totalDiaries((long) totalDiaries)
+                .activeUsers( activeUsers)
+                .totalDiaries( totalDiaries)
                 .todayNewDiaries(todayNewDiaries)
-                .totalSessions((long) totalSessions)
+                .totalSessions( totalSessions)
                 .todayNewSessions(todayNewSessions)
                 .avgMoodScore(avgMoodScore)
                 .build();
     }
 
-    public static AnalyticsOverviewResponseDTO.ConsultationStats toConsultationStats(int totalSessions,
+    public static AnalyticsOverviewResponseDTO.ConsultationStats toConsultationStats(long totalSessions,
                                                                                      Double avgDurationMinutes,
                                                                                      List<AnalyticsOverviewResponseDTO.DailyTrendItem> dailyTrend) {
         return AnalyticsOverviewResponseDTO.ConsultationStats.builder()
-                .totalSessions((long) totalSessions)
+                .totalSessions(totalSessions)
                 .avgDurationMinutes(avgDurationMinutes)
                 .dailyTrend(dailyTrend)
                 .build();
@@ -50,36 +52,33 @@ public class AnalyticsConvert {
 
     //咨询每日趋势：当天会话数与参与用户数
     public static AnalyticsOverviewResponseDTO.DailyTrendItem toDailyTrendItem(LocalDate date,
-                                                                               List<ConsultationSession> sessions) {
+                                                                               ConsultStatDTO.Daily sessions) {
         return AnalyticsOverviewResponseDTO.DailyTrendItem.builder()
                 .date(date.toString())
-                .sessionCount((long) sessions.size())
-                .userCount(sessions.stream().map(ConsultationSession::getUserId).distinct().count())
+                .sessionCount(sessions==null?0L:sessions.getCount())
+                .userCount(sessions==null?0L:sessions.getUserCount())
                 .build();
     }
 
     //情绪趋势：当天平均情绪分与记录数
     public static AnalyticsOverviewResponseDTO.EmotionTrendItem toEmotionTrendItem(LocalDate date,
-                                                                                   List<EmotionDiary> diaries) {
-        Double avgMoodScore = diaries.isEmpty() ? null
-                : round1(diaries.stream().mapToInt(EmotionDiary::getMoodScore).average().orElse(0));
+                                                                                   DiaryStatDTO.Daily diaries) {
         return AnalyticsOverviewResponseDTO.EmotionTrendItem.builder()
                 .date(date.toString())
-                .avgMoodScore(avgMoodScore)
-                .recordCount((long) diaries.size())
+                .avgMoodScore(diaries==null?null:diaries.getAvgMoodScore())
+                .recordCount(diaries==null?0L:diaries.getCount())
                 .build();
     }
 
     //用户活跃度：当天活跃/新增/日记/咨询四类用户数
-    public static AnalyticsOverviewResponseDTO.UserActivityItem toUserActivityItem(LocalDate date, Set<Long> activeUsers,
-                                                                                   long newUserCount, Set<Long> diaryUsers,
-                                                                                   Set<Long> consultationUsers) {
+    public static AnalyticsOverviewResponseDTO.UserActivityItem toUserActivityItem(LocalDate date,long activeUsers,
+                                                                                   long newUsers,long diaryUsers,long consultUsers) {
         return AnalyticsOverviewResponseDTO.UserActivityItem.builder()
                 .date(date.toString())
-                .activeUsers((long) activeUsers.size())
-                .newUsers(newUserCount)
-                .diaryUsers((long) diaryUsers.size())
-                .consultationUsers((long) consultationUsers.size())
+                .activeUsers(activeUsers)
+                .newUsers(newUsers)
+                .diaryUsers(diaryUsers)
+                .consultationUsers(consultUsers)
                 .build();
     }
 

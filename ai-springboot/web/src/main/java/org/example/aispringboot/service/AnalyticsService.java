@@ -2,14 +2,12 @@ package org.example.aispringboot.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.extern.slf4j.Slf4j;
-import org.example.aispringboot.DTO.response.AnalyticsOverviewResponseDTO;
+import org.example.aispringboot.DTO.response.*;
 import org.example.aispringboot.DTO.response.AnalyticsOverviewResponseDTO.ConsultationStats;
 import org.example.aispringboot.DTO.response.AnalyticsOverviewResponseDTO.DailyTrendItem;
 import org.example.aispringboot.DTO.response.AnalyticsOverviewResponseDTO.EmotionTrendItem;
 import org.example.aispringboot.DTO.response.AnalyticsOverviewResponseDTO.SystemOverview;
 import org.example.aispringboot.DTO.response.AnalyticsOverviewResponseDTO.UserActivityItem;
-import org.example.aispringboot.DTO.response.UserStatDTO;
-import org.example.aispringboot.DTO.response.UvTrendItem;
 import org.example.aispringboot.entity.ConsultationMessage;
 import org.example.aispringboot.entity.ConsultationSession;
 import org.example.aispringboot.entity.EmotionDiary;
@@ -38,6 +36,10 @@ public class AnalyticsService {
     @Autowired
     private UserStatClient userStatClient;
     @Autowired
+    private DiaryStatClient diaryStatClient;
+    @Autowired
+    private ConsultStatClient consultStatClient;
+    @Autowired
     private EmotionDiaryMapper emotionDiaryMapper;
     @Autowired
     private ConsultationSessionMapper consultationSessionMapper;
@@ -53,81 +55,54 @@ public class AnalyticsService {
      */
     @Cacheable(cacheNames = "analytics", key = "'overview'")
     public AnalyticsOverviewResponseDTO getOverview() {
+        UserStatDTO userStat=userStatClient.fetch(RECENT_DAYS);
+        DiaryStatDTO diaryStat=diaryStatClient.fetch(RECENT_DAYS);
+        ConsultStatDTO consultStat=consultStatClient.fetch(RECENT_DAYS);
+
         LocalDate today = LocalDate.now();
         LocalDate since = today.minusDays(RECENT_DAYS - 1L);
 
-        //数据量不大，直接读库全量拉取、在内存里聚合，不写GROUP BY
-        //用户表已经搬到 user-service 的库，web 读不到，改为调它的内部接口拿总数和每日新增
-        UserStatDTO userStat = userStatClient.fetch(RECENT_DAYS);
-        List<EmotionDiary> diaries = emotionDiaryMapper.selectList(null);
-        List<ConsultationSession> sessions = consultationSessionMapper.selectList(null);
-        List<ConsultationMessage> messages = consultationMessageMapper.selectList(null);
+//        //活跃用户：近30天写过日记或发起过咨询
+        String[] uvKeys=new String[RECENT_DAYS];
+        for(int i=0;i<RECENT_DAYS;i++)
+            uvKeys[i]=RedisKeys.uv(since.plusDays(i));
+        Long totalActiveUsers= null;
+        try {
+            totalActiveUsers = nvl(redis.opsForHyperLogLog().size(uvKeys));
+        } catch (Exception e) {
+            log.warn("AnalyticsService中Redis HyperLogLog总活跃用户失败",e);
+        }
 
-        //近30天窗口
-        List<EmotionDiary> windowDiaries = diaries.stream()
-                .filter(d -> !d.getDiaryDate().isBefore(since))
-                .toList();
-        List<ConsultationSession> windowSessions = sessions.stream()
-                .filter(s -> !s.getStartedAt().toLocalDate().isBefore(since))
-                .toList();
-
-        //活跃用户：近30天写过日记或发起过咨询
-        Set<Long> activeUserIds = new HashSet<>();
-        windowDiaries.forEach(d -> activeUserIds.add(d.getUserId()));
-        windowSessions.forEach(s -> activeUserIds.add(s.getUserId()));
-
-        //今日新增
-        long todayNewDiaries = diaries.stream()
-                .filter(d -> d.getDiaryDate().equals(today)).count();
-        long todayNewSessions = sessions.stream()
-                .filter(s -> s.getStartedAt().toLocalDate().equals(today)).count();
-
-        //全量平均情绪分，无日记时为null
-        Double avgMoodScore = diaries.isEmpty() ? null
-                : round1(diaries.stream().mapToInt(EmotionDiary::getMoodScore).average().orElse(0));
-
-        //平均会话时长：每个会话最后一条消息时间 - 会话开始时间
-        Double avgDurationMinutes = calcAvgDurationMinutes(sessions, messages);
-
-        //按自然日分组
-        Map<LocalDate, List<EmotionDiary>> diariesByDate = windowDiaries.stream()
-                .collect(Collectors.groupingBy(EmotionDiary::getDiaryDate));
-        Map<LocalDate, List<ConsultationSession>> sessionsByDate = windowSessions.stream()
-                .collect(Collectors.groupingBy(s -> s.getStartedAt().toLocalDate()));
-        Map<LocalDate, Long> newUsersByDate = userStat.getDailyNew().entrySet().stream()
-                .collect(Collectors.toMap(e -> LocalDate.parse(e.getKey()), Map.Entry::getValue));
-
-        //补齐30天里没有记录的日期
+        Map<LocalDate,Long> newUsersByDate=userStat.getDailyNew().entrySet().stream()
+                .collect(Collectors.toMap(e->LocalDate.parse(e.getKey()),Map.Entry::getValue));
         List<EmotionTrendItem> emotionTrend = new ArrayList<>();
         List<DailyTrendItem> dailyTrend = new ArrayList<>();
         List<UserActivityItem> userActivity = new ArrayList<>();
-        for (LocalDate d = since; !d.isAfter(today); d = d.plusDays(1)) {
-            List<EmotionDiary> dayDiaries = diariesByDate.getOrDefault(d, List.of());
-            List<ConsultationSession> daySessions = sessionsByDate.getOrDefault(d, List.of());
 
-            Set<Long> diaryUserIds;
-            Set<Long> consultationUserIds;
-            Set<Long> dayActiveUserIds;
-                diaryUserIds = dayDiaries.stream()
-                        .map(EmotionDiary::getUserId).collect(Collectors.toSet());
-                consultationUserIds = daySessions.stream()
-                        .map(ConsultationSession::getUserId).collect(Collectors.toSet());
-                dayActiveUserIds = new HashSet<>();
-                dayActiveUserIds.addAll(diaryUserIds);
-                dayActiveUserIds.addAll(consultationUserIds);
+        for(LocalDate d=since;!d.isAfter(today);d=d.plusDays(1)){
+            String k=d.toString();
+            DiaryStatDTO.Daily dd=diaryStat.getDaily().get(k);
+            ConsultStatDTO.Daily cd=consultStat.getDaily().get(k);
+            long diaryUsers=dd==null?0:dd.getCount();
+            long consultUsers=cd==null?0:cd.getCount();
+            long dayActive= 0;
+            try {
+                dayActive = nvl(redis.opsForHyperLogLog().size(RedisKeys.uv(d)));
+            } catch (Exception e) {
+                log.warn("AnalyticsService中Redis HyperLogLog每日活跃人数失败",e);
+            }
 
-
-            emotionTrend.add(AnalyticsConvert.toEmotionTrendItem(d, dayDiaries));
-            dailyTrend.add(AnalyticsConvert.toDailyTrendItem(d, daySessions));
-            userActivity.add(AnalyticsConvert.toUserActivityItem(d, dayActiveUserIds,
-                    newUsersByDate.getOrDefault(d, 0L), diaryUserIds, consultationUserIds));
+            emotionTrend.add(AnalyticsConvert.toEmotionTrendItem(d,dd));
+            dailyTrend.add(AnalyticsConvert.toDailyTrendItem(d,cd));
+            userActivity.add(AnalyticsConvert.toUserActivityItem(d,dayActive,
+                    newUsersByDate.getOrDefault(d,0L),diaryUsers,consultUsers));
         }
 
         SystemOverview systemOverview = AnalyticsConvert.toSystemOverview(
-                userStat.getTotal(), activeUserIds.size(), diaries.size(), todayNewDiaries,
-                sessions.size(), todayNewSessions, avgMoodScore);
+                userStat.getTotal(), totalActiveUsers, diaryStat.getTotal(),diaryStat.getTodayNew(),
+                consultStat.getTotal(),consultStat.getTodayNew(),diaryStat.getAvgMoodScore());
         ConsultationStats consultationStats = AnalyticsConvert.toConsultationStats(
-                sessions.size(), avgDurationMinutes, dailyTrend);
+                consultStat.getTotal(),consultStat.getAvgDurationMinutes(), dailyTrend);
 
         return AnalyticsConvert.toResponse(systemOverview, consultationStats,
                 emotionTrend, userActivity);
@@ -242,5 +217,9 @@ public class AnalyticsService {
     //保留一位小数
     private static Double round1(double value) {
         return Math.round(value * 10.0) / 10.0;
+    }
+    //判空
+    private static long nvl(Long v){
+        return v==null?0L:v;
     }
 }

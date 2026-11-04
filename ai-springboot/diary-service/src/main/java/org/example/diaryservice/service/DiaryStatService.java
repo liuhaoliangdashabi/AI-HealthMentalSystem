@@ -30,6 +30,7 @@ public class DiaryStatService {
         for(DiaryDailyRow row :diaryMapper.dailySince(since)){
             DiaryStatDTO.Daily d=new DiaryStatDTO.Daily();
             d.setCount(row.getCnt());
+            d.setUserCount(row.getUserCount());
             d.setAvgMoodScore(row.getAvgMood());
             dto.getDaily().put(row.getDiaryDate().toString(),d);
         }

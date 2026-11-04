@@ -19,6 +19,7 @@ public class ConsultStatDTO {
     public static class Daily{
         private long count;
         private Double avgMoodScore;
+        private long userCount;
     }
 
     public static ConsultStatDTO empty() {

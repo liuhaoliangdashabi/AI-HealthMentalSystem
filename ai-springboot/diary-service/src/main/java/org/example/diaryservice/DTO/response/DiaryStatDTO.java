@@ -15,6 +15,7 @@ public class DiaryStatDTO {
     public static class Daily{
         private long count;
         private Double avgMoodScore;
+        private long userCount;
     }
 
     public static DiaryStatDTO empty() {

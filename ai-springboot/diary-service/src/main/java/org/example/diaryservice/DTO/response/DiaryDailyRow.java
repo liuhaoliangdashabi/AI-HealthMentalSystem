@@ -9,5 +9,6 @@ public class DiaryDailyRow {
     private LocalDate diaryDate;
     private Long cnt;
     private Double avgMood;
+    private Long userCount;
 }
 

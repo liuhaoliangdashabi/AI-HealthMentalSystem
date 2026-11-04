@@ -15,7 +15,7 @@ public interface DiaryMapper extends BaseMapper<EmotionDiary> {
     @Select("select round(avg(mood_score),1) from mental_health_diary.emotion_diary")
     Double avgMoodAll();
 
-    @Select("select diary_date as diaryDate,count(*) as cnt,round(avg(mood_score),1) as avgMood"+
+    @Select("select diary_date as diaryDate,count(*) as cnt,round(avg(mood_score),1) as avgMood,count(distinct user_id) as userCount"+
             " from mental_health_diary.emotion_diary where diary_date>=#{since} group by diary_date")
     List<DiaryDailyRow> dailySince(@Param("since")LocalDate since);
 }
