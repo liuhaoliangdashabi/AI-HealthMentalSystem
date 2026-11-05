@@ -15,6 +15,7 @@ import org.example.diaryservice.mapper.DiaryMapper;
 import org.example.diaryservice.service.convert.DiaryConvert;
 import org.example.diaryservice.util.RedisKeys;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
@@ -73,6 +74,7 @@ public class DiaryService {
      * ② 记录存在但不是你的（越权尝试，属安全事件，warn 级，不惊动运维）
      * ③ 查到之后被别人删了（并发，error 级）
      */
+    @CacheEvict(cacheNames = "activity", allEntries = true)
     public void deleteEmotionDiary(Long diaryId,Long userId,boolean isAdmin) {
         EmotionDiary diary=emotionDiaryMapper.selectById(diaryId);
         if(diary==null){
@@ -92,6 +94,7 @@ public class DiaryService {
     }
 
     //C端提交日记。userId 从 token 来，不让前端传 —— 防止给别人写日记
+    @CacheEvict(cacheNames = "activity", allEntries = true)
     public void addEmotionDiary(DiaryCommandDTO commandDTO, Long userId) {
         if(commandDTO.getDiaryDate().isBefore(LocalDate.now().minusDays(30))){
             throw new BusinessException("只能补写最近 30 天的日记");
@@ -159,6 +162,7 @@ public class DiaryService {
         queueService.enqueueDiaryAnalysis(diary.getId());
     }
 
+    @CacheEvict(cacheNames = "activity", allEntries = true)
     public void updateEmotionDiary(DiaryCommandDTO dto,
                                    Long diaryId, Long userId) {
         try {

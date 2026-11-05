@@ -36,6 +36,7 @@ public class CategoryService {
     private static final String CATEGORY_TREE_KEY="cache:category:tree";
     private static final Duration CATEGORY_TREE_TTL=Duration.ofMinutes(10);
     private static final String ARTICLE_CACHE_NAME="article";
+    private static final String ARTICLE_HOT_CACHE_NAME="articleHot";
 
     public CategoryService(KnowledgeCategoryMapper categoryMapper,
                            KnowledgeArticleMapper articleMapper,
@@ -94,6 +95,15 @@ public class CategoryService {
                 cache.evict(id);
             }catch(Exception e){
                 log.warn("文章缓存失效失败，id={}，等TTL自然过期",id,e);
+            }
+        }
+        //改分类会改变文章列表里展示的分类名，推荐位也得跟着失效
+        Cache hot=cacheManager.getCache(ARTICLE_HOT_CACHE_NAME);
+        if(hot!=null){
+            try{
+                hot.clear();
+            }catch(Exception e){
+                log.warn("推荐位缓存清空失败，等TTL自然过期",e);
             }
         }
     }

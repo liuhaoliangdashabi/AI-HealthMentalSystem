@@ -92,6 +92,11 @@ public class AnalyticsService {
                 emotionTrend, userActivity);
     }
 
+    /**
+     * UV 曲线：一次请求要打 30 次 HyperLogLog，走 Redis 不算慢但也没必要每次都算。
+     * 复用 analytics 缓存（TTL 60 秒），和总览保持同一个刷新节奏。
+     */
+    @Cacheable(cacheNames = "analytics", key = "'uv-trend'")
     public List<UvTrendItem> getUVTrend(){
         LocalDate today= LocalDate.now();
         LocalDate since=today.minusDays(RECENT_DAYS-1L);

@@ -48,10 +48,10 @@ public class CacheConfig implements CachingConfigurer {
 
         return RedisCacheManager.builder(factory)
                 .cacheDefaults(cfg)
-                //按 cacheName 单独配 TTL。全局 30~40 分钟是给文章详情这种改一次看很久的数据用的，
-                //看板要求 60 秒内能看到变化，30 分钟的延迟会让人以为系统坏了
-//                .withCacheConfiguration("analytics",
-//                        cfg.entryTtl(Duration.ofSeconds(60)))
+                //按 cacheName 单独配 TTL。全局 30~40 分钟是给文章详情这种改一次看很久的数据用的。
+                //推荐位是首页门面，热度每分钟在变，也怕发新文 30 分钟不出现，所以单独压到 60 秒
+                .withCacheConfiguration("articleHot",
+                        cfg.entryTtl(Duration.ofSeconds(60)))
                 .build();
     }
 

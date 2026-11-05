@@ -6,6 +6,7 @@ import org.example.diaryservice.DTO.response.UserActivityItem;
 import org.example.diaryservice.entity.EmotionDiary;
 import org.example.diaryservice.mapper.DiaryMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -27,9 +28,14 @@ public class ActivityService {
     @Autowired
     private DiaryMapper diaryMapper;
 
-    /** 最近 days 天，每天一条。只 select 三列，日历只要颜色，正文不用查 */
+    /**
+     * 个人主页贡献日历：只读三列、每次进主页都拉一遍，读多写少 → 缓存 10 分钟。
+     * 写日记/改日记/删日记都会清掉（见 DiaryService 上的 @CacheEvict）。
+     * 返回 ArrayList 而不是 List.of()：不可变集合写进 JSON 会带 JDK 内部类名，读回来反序列化失败。
+     */
+    @Cacheable(cacheNames = "activity", key = "#userId + ':' + #days")
     public List<UserActivityItem> listRecentActivity(Long userId, int days) {
-        if (userId == null) return List.of();
+        if (userId == null) return new ArrayList<>();
         int span = Math.max(1, days);
         LocalDate from = LocalDate.now().minusDays(span - 1L);
 

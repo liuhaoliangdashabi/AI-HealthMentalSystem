@@ -22,6 +22,8 @@ import org.example.knowledgeservice.util.RedisKeys;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.stereotype.Service;
@@ -101,6 +103,7 @@ public class ArticleService {
         return page.convert(a->dtoMap.get(a.getId()));
     }
 
+    @CacheEvict(cacheNames = "articleHot", allEntries = true)
     public void createArticle(@Valid ArticleCommandDTO commandDTO, Long userId,String userName) {
         log.warn("userId={}新增文章进分组categoryId={}",userId,commandDTO.getCategoryId());
         if(categoryMapper.selectById(commandDTO.getCategoryId())==null){
@@ -110,7 +113,10 @@ public class ArticleService {
         articleMapper.insert(article);
     }
 
-    @CacheEvict(cacheNames = "article", key = "#articleId")
+    @Caching(evict = {
+            @CacheEvict(cacheNames = "article", key = "#articleId"),
+            @CacheEvict(cacheNames = "articleHot", allEntries = true)
+    })
     public void putArticleStatus(String articleId, ArticleStatusCommandDTO status){
         //之前完全不校验，前端传个 99 也会原样写进库
         //  正好把一直没人调用的 ArticleStatus.isValidCode 用上
@@ -166,7 +172,10 @@ public class ArticleService {
         return dto;
     }
 
-    @CacheEvict(cacheNames = "article", key = "#articleId")
+    @Caching(evict = {
+            @CacheEvict(cacheNames = "article", key = "#articleId"),
+            @CacheEvict(cacheNames = "articleHot", allEntries = true)
+    })
     public void putArticleDetail(String articleId, @Valid ArticleCommandDTO commandDTO) {
         KnowledgeArticle entity=KnowledgeConvert.toUpdateEntity(articleId,commandDTO);
         int count=articleMapper.updateById(entity);
@@ -177,7 +186,10 @@ public class ArticleService {
         log.debug("文章已更新：articleId={}",articleId);
     }
 
-    @CacheEvict(cacheNames = "article", key = "#articleId")
+    @Caching(evict = {
+            @CacheEvict(cacheNames = "article", key = "#articleId"),
+            @CacheEvict(cacheNames = "articleHot", allEntries = true)
+    })
     public void deleteArticle(String articleId) {
         int count=articleMapper.deleteById(articleId);
         if(count==0){
@@ -191,6 +203,12 @@ public class ArticleService {
      * 热度榜只有被读过的文章才进榜，新部署或当天无人访问时榜可能是空的，所以必须补齐。
      * Redis挂了也走补齐分支，推荐位是首页门面，宁可退化成最新列表也不能整块消失。
      */
+    /**
+     * 首页推荐位：读多写少、key 固定 → 走 60 秒缓存（见 CacheConfig）。
+     * 返回必须是可反序列化的 ArrayList：List.of()/stream().toList() 是 JDK 内部不可变类，
+     * JSON 里会写成 ImmutableCollections$ListN，读回来直接反序列化失败。
+     */
+    @Cacheable(cacheNames = "articleHot", key = "'top'")
     public List<ArticleResponseDTO> getHotArticle() {
         //1. 取榜单 ID（Redis 异常 → 空列表，后面自然走补齐）
         List<String> hotIds = new ArrayList<>();
@@ -235,13 +253,15 @@ public class ArticleService {
         }
 
         if (ordered.isEmpty()) {
-            return List.of();
+            return new ArrayList<>();
         }
         Map<String, ArticleResponseDTO> dtoMap = complementArticleDTO(ordered);
-        return ordered.stream()
-                .map(a -> dtoMap.get(a.getId()))
-                .filter(Objects::nonNull)
-                .toList();
+        List<ArticleResponseDTO> result = new ArrayList<>();
+        for (KnowledgeArticle a : ordered) {
+            ArticleResponseDTO dto = dtoMap.get(a.getId());
+            if (dto != null) result.add(dto);
+        }
+        return result;
     }
 
     private ArticleResponseDTO withCoverUrl(ArticleResponseDTO dto){
