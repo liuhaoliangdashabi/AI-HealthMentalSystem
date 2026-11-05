@@ -66,7 +66,7 @@ public class AnalyticsService {
         String[] uvKeys=new String[RECENT_DAYS];
         for(int i=0;i<RECENT_DAYS;i++)
             uvKeys[i]=RedisKeys.uv(since.plusDays(i));
-        Long totalActiveUsers= null;
+        Long totalActiveUsers=0L;
         try {
             totalActiveUsers = nvl(redis.opsForHyperLogLog().size(uvKeys));
         } catch (Exception e) {
@@ -83,8 +83,8 @@ public class AnalyticsService {
             String k=d.toString();
             DiaryStatDTO.Daily dd=diaryStat.getDaily().get(k);
             ConsultStatDTO.Daily cd=consultStat.getDaily().get(k);
-            long diaryUsers=dd==null?0:dd.getCount();
-            long consultUsers=cd==null?0:cd.getCount();
+            long diaryUsers=dd==null?0:dd.getUserCount();
+            long consultUsers=cd==null?0:cd.getUserCount();
             long dayActive= 0;
             try {
                 dayActive = nvl(redis.opsForHyperLogLog().size(RedisKeys.uv(d)));

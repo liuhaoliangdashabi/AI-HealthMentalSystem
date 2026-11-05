@@ -15,7 +15,7 @@
     <packaging>pom</packaging>
 
     <modules>
-        <module>web</module>
+        <module>analytics-service</module>
         <module>common</module>
         <module>ai-common</module>
         <module>knowledge-service</module>

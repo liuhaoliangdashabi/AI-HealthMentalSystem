@@ -19,10 +19,24 @@ spring:
         speech: none
         transcription: none
   application:
-    name: ai-springboot
+    name: analytics-service
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+  cloud:
+    nacos:
+      config:
+        server-addr: 127.0.0.1:8848
+        namespace: dev
+        group: dev
+      discovery:
+        ip: 127.0.0.1
+        server-addr: 127.0.0.1:8848
+        namespace: dev
+        group: dev
+  config:
+    import:
+      - optional:nacos:analytics-service.yaml
   data:
     redis:
       sentinel:
@@ -49,6 +63,7 @@ jwt:
   expiration: 86400000  # 24小时（毫秒）
   header: token  # token头部名称
 server:
+  port: 8070
   tomcat:
     remoteip:
       remote-ip-header: X-Forwarded-For
@@ -70,6 +85,13 @@ logging:
     org.example.aispringboot.AiService: debug
     org.example.aispringboot.common: debug
     org.springframework.jdbc: debug
+internal:
+  diary-service:
+    url: http://127.0.0.1:8030
+  consult-service:
+    url: http://127.0.0.1:8040
+  user-service:
+    url: http://127.0.0.1:8050
 ---
 #模拟生产环境
 spring:

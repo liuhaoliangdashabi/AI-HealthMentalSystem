@@ -48,6 +48,10 @@ spring:
               uri: lb://consult-service
               predicates:
                 - Path=/api/psychological-chat/**
+            - id: analytics-service
+              uri: lb://analytics-service
+              predicates:
+                - Path=/api/data-analytics/**
             - id: web
               uri: http://127.0.0.1:8080
               predicates:

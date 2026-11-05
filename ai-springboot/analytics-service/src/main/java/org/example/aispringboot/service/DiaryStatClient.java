@@ -11,7 +11,7 @@ import org.springframework.web.client.RestClient;
 public class DiaryStatClient {
     private final RestClient rest= RestClient.create();
 
-    @Value("${internal.diary-service.url: http://127.0.0.1:8030}")
+    @Value("${internal.diary-service.url:http://127.0.0.1:8030}")
     private String baseUrl;
 
     public DiaryStatDTO fetch(int days){

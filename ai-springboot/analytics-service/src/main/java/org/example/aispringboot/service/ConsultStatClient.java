@@ -12,7 +12,7 @@ import org.springframework.web.client.RestClient;
 public class ConsultStatClient {
     private final RestClient rest= RestClient.create();
 
-    @Value("${internal.consult-service.url: http://127.0.0.1:8040}")
+    @Value("${internal.consult-service.url:http://127.0.0.1:8040}")
     private String baseUrl;
 
     public ConsultStatDTO fetch(int days){

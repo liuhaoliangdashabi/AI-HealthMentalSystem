@@ -10,7 +10,7 @@
 | `d10/` | D10 下线 web 咨询接口 | 2026-11-01 | 15 个 | 咨询域：`PsycholigicalChatController`、`ConsultationSessionsService`、`ConsultationMessageService`、`KnowledgeConsultationService`、`ConsultationConvert`、`AiTaskConsumer`、`AiTaskQueueService`、`AiService/*`（EmotionAnalysisService / PsychologicalSupportService / StructOutPut）、4 个 Consultation DTO |
 | `d12/` | D12 下线 web 用户域 + 文件域 | 2026-11-02 | 22 个 | **用户域 14**：`UserController`、`UserService`、`OnlineUserService`、`UserMapper`、`UserConvert`、`entity/User`、`SignService`、`DiaryService`、`UserActivityItem`、3 个 `User*CommandDTO`、`UserStatus`、`UserType`<br>**文件域 8**：`FileService`、`FileCompensator`、`FileMapper`、`SysFileInfo`、`OSSUtil`、`OssConfig`、`OssClientConfig`、`AsyncConfig` |
 
-两批的相对路径都按原位置保留：`d10/` 以 `org/example/aispringboot/` 下一级为根，`d12/` 多套了一层 `web/src/main/java/org/example/aispringboot/`。
+两批的相对路径都按原位置保留：`d10/` 以 `org/example/aispringboot/` 下一级为根，`d12/` 多套了一层 `../analytics-service`。
 
 ## 这些代码现在归谁
 
@@ -24,7 +24,7 @@
 
 ## 还原方法
 
-按原路径搬回 `web/src/main/java/org/example/aispringboot/` 对应位置，然后：
+按原路径搬回 `../analytics-service` 对应位置，然后：
 
 ```bash
 mvn -o -pl web -am clean package -DskipTests
