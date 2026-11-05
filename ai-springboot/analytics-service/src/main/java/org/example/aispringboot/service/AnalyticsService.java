@@ -1,6 +1,5 @@
 package org.example.aispringboot.service;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.extern.slf4j.Slf4j;
 import org.example.aispringboot.DTO.response.*;
 import org.example.aispringboot.DTO.response.AnalyticsOverviewResponseDTO.ConsultationStats;
@@ -8,12 +7,6 @@ import org.example.aispringboot.DTO.response.AnalyticsOverviewResponseDTO.DailyT
 import org.example.aispringboot.DTO.response.AnalyticsOverviewResponseDTO.EmotionTrendItem;
 import org.example.aispringboot.DTO.response.AnalyticsOverviewResponseDTO.SystemOverview;
 import org.example.aispringboot.DTO.response.AnalyticsOverviewResponseDTO.UserActivityItem;
-import org.example.aispringboot.entity.ConsultationMessage;
-import org.example.aispringboot.entity.ConsultationSession;
-import org.example.aispringboot.entity.EmotionDiary;
-import org.example.aispringboot.mapper.ConsultationMessageMapper;
-import org.example.aispringboot.mapper.ConsultationSessionMapper;
-import org.example.aispringboot.mapper.EmotionDiaryMapper;
 import org.example.aispringboot.service.convert.AnalyticsConvert;
 import org.example.aispringboot.util.RedisKeys;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,12 +29,6 @@ public class AnalyticsService {
     private DiaryStatClient diaryStatClient;
     @Autowired
     private ConsultStatClient consultStatClient;
-    @Autowired
-    private EmotionDiaryMapper emotionDiaryMapper;
-    @Autowired
-    private ConsultationSessionMapper consultationSessionMapper;
-    @Autowired
-    private ConsultationMessageMapper consultationMessageMapper;
     @Autowired
     private StringRedisTemplate redis;
 
@@ -122,40 +109,6 @@ public class AnalyticsService {
             trend.add(item);
         }
         return trend;
-    }
-
-    private Map<LocalDate,Set<Long>> queryUvDetailFromDb(List<LocalDate> days){
-        Map<LocalDate,Set<Long>> byDay=new HashMap<>();
-        LocalDate min=days.get(0);
-        LocalDate max=days.get(days.size()-1);
-        emotionDiaryMapper.selectList(new LambdaQueryWrapper<EmotionDiary>().
-                        ge(EmotionDiary::getDiaryDate,min).
-                        le(EmotionDiary::getDiaryDate,max))
-                .forEach(d->byDay.computeIfAbsent(d.getDiaryDate(),k->new HashSet<>())
-                        .add(d.getUserId()));
-        consultationSessionMapper.selectList(new LambdaQueryWrapper<ConsultationSession>()
-                .ge(ConsultationSession::getStartedAt,min.atStartOfDay())
-                .lt(ConsultationSession::getStartedAt,max.plusDays(1).atStartOfDay()))
-                .forEach(s->byDay.computeIfAbsent(s.getStartedAt().toLocalDate(),
-                                k->new HashSet<>())
-                        .add(s.getUserId()));
-        return byDay;
-    }
-
-    private void writeBackToRedis(LocalDate day,Set<Long> userIds){
-        try{
-            if(userIds.isEmpty()){
-                redis.opsForValue().set(RedisKeys.uvEmpty(day),"1",RedisKeys.UV_TTL);
-                return;
-            }
-            String key=RedisKeys.uv(day);
-            redis.opsForHyperLogLog().add(key,
-                    userIds.stream().map(String::valueOf).toArray(String[]::new));
-
-            redis.expire(key,RedisKeys.UV_TTL);
-        }catch(Exception e){
-            log.warn("UV回存失败，date={}",day,e);
-        }
     }
 
     //判空

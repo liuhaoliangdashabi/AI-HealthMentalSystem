@@ -1,23 +1,4 @@
 spring:
-  ai:
-    openai:
-      chat:
-        options:
-          model: deepseek-ai/DeepSeek-V3
-          #实测加 tool-choice: required 会让模型反复并发调用工具（6 条消息触发 128 次），
-          #造成死循环并刷爆 API 额度，所以不能用
-          tool-calling:
-            enabled: true
-        completions-path: /v1/chat/completions
-      api-key: ${API_KEY}
-      base-url: https://api.siliconflow.cn
-    model:
-      embedding: none
-      image: none
-      moderation: none
-      audio:
-        speech: none
-        transcription: none
   application:
     name: analytics-service
   autoconfigure:
@@ -25,39 +6,17 @@ spring:
       - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
   cloud:
     nacos:
-      config:
-        server-addr: 127.0.0.1:8848
-        namespace: dev
-        group: dev
       discovery:
         ip: 127.0.0.1
         server-addr: 127.0.0.1:8848
         namespace: dev
         group: dev
-  config:
-    import:
-      - optional:nacos:analytics-service.yaml
   data:
     redis:
       sentinel:
         master: mymaster
         nodes: 127.0.0.1:26379
       timeout: 3000ms
-  datasource:
-    url: jdbc:mysql://localhost:3306/mental_health_assistant?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8
-    username: root
-    password: ${DB_PASSWORD}
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    #文件上传上限。不配的话 Spring Boot 默认只有 1MB：
-    #那样OSSUtil里那个10MB校验会因为请求先被MultipartResolver拦掉而（永远执行不到）
-  servlet:
-    multipart:
-      max-file-size: 10MB
-      max-request-size: 10MB
-  task:
-    scheduling:
-      pool:
-        size: 4 #默认值为1，注意跌过坑
 jwt:
   secret: ${JWT_SECRET}
   expiration: 86400000  # 24小时（毫秒）
@@ -69,22 +28,13 @@ server:
       remote-ip-header: X-Forwarded-For
       protocol-header: X-Forwarded-Proto
       internal-proxies: 10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|127\.\d+\.\d+\.\d+
-#OSS 对象存储
-#AK/SK 不在这里配，走环境变量：OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET
-oss:
-  region: cn-beijing                        #华北2（北京）
-  bucket: mental-health-ai-assistant
-#  domain: https://cdn.example.com  #可选：自定义域名/CDN，留空用阿里云默认域名
-#白名单：只有列出来的包开 debug（没列到的回落 root=INFO，第三方自动静音）
+#白名单：只有列出来的包开 debug
 #新增包且里面写了 log.debug，记得回来补一行
 logging:
   level:
     org.example.aispringboot.controller: debug
     org.example.aispringboot.service: debug
     org.example.aispringboot.util: debug
-    org.example.aispringboot.AiService: debug
-    org.example.aispringboot.common: debug
-    org.springframework.jdbc: debug
 internal:
   diary-service:
     url: http://127.0.0.1:8030
