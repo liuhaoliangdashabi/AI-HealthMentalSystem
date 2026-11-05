@@ -3,8 +3,6 @@ package org.example.aispringboot.service.convert;
 import org.example.aispringboot.DTO.response.AnalyticsOverviewResponseDTO;
 import org.example.aispringboot.DTO.response.ConsultStatDTO;
 import org.example.aispringboot.DTO.response.DiaryStatDTO;
-import org.example.aispringboot.entity.ConsultationSession;
-import org.example.aispringboot.entity.EmotionDiary;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -80,10 +78,5 @@ public class AnalyticsConvert {
                 .diaryUsers(diaryUsers)
                 .consultationUsers(consultUsers)
                 .build();
-    }
-
-    //保留一位小数
-    private static Double round1(double value) {
-        return Math.round(value * 10.0) / 10.0;
     }
 }

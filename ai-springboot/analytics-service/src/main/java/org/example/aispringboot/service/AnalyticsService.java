@@ -21,10 +21,7 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
-import java.security.cert.LDAPCertStoreParameters;
-import java.time.Duration;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -111,51 +108,17 @@ public class AnalyticsService {
     public List<UvTrendItem> getUVTrend(){
         LocalDate today= LocalDate.now();
         LocalDate since=today.minusDays(RECENT_DAYS-1L);
-        Map<LocalDate,Long> uvByDay=new LinkedHashMap<>();
-        List<LocalDate> needDb=new ArrayList<>();
-        boolean redisDown=false;
-        for(LocalDate day=since;!day.isAfter(today);day=day.plusDays(1)){
-            String key= RedisKeys.uv(day);
-            Long count;
-            try{
-                count=redis.opsForHyperLogLog().size(key);
-                if (count==0L) {
-                    boolean hasData=Boolean.TRUE.equals(redis.hasKey(key));
-                    boolean knownEmpty=Boolean.TRUE.equals(redis.hasKey(RedisKeys.uvEmpty(day)));
-                    //可能真没人访问，也可能key不存在
-                    if(!hasData && !knownEmpty){
-                        needDb.add(day);
-                        continue;
-                    }
-                }
-
-            }catch(Exception e){
-                log.warn("Redis读取失败，{}起剩余天数整段回源",day,e);
-                redisDown=true;
-                for(LocalDate d=day;!d.isAfter(today);d=d.plusDays(1)){
-                    needDb.add(d);
-                }
-                break;
-            }
-            uvByDay.put(day,count);
-        }
-
-        if(!needDb.isEmpty()){
-            Map<LocalDate,Set<Long>> detail = queryUvDetailFromDb(needDb);
-            for(LocalDate day:needDb){
-                Set<Long> userIds=detail.getOrDefault(day,Set.of());
-                uvByDay.put(day,(long)userIds.size());
-                if (!redisDown) {
-                    writeBackToRedis(day,userIds);
-                }
-            }
-        }
-
         List<UvTrendItem> trend=new ArrayList<>();
         for(LocalDate day=since;!day.isAfter(today);day=day.plusDays(1)){
+            long count=0L;
+            try{
+                count=nvl(redis.opsForHyperLogLog().size(RedisKeys.uv(day)));
+            }catch (Exception e){
+                log.warn("Redis读取UV失败，day={}按0处理",day,e);
+            }
             UvTrendItem item=new UvTrendItem();
             item.setDate(day.toString());
-            item.setActiveUsers(uvByDay.getOrDefault(day,0L));
+            item.setActiveUsers(count);
             trend.add(item);
         }
         return trend;
@@ -195,29 +158,6 @@ public class AnalyticsService {
         }
     }
 
-    private Double calcAvgDurationMinutes(List<ConsultationSession> sessions,
-                                          List<ConsultationMessage> messages) {
-        //每个会话最后一条消息的时间
-        Map<Long, Optional<LocalDateTime>> lastMessageAt = messages.stream()
-                .collect(Collectors.groupingBy(ConsultationMessage::getSessionId,
-                        Collectors.mapping(ConsultationMessage::getCreatedAt,
-                                Collectors.maxBy(Comparator.naturalOrder()))));
-
-        List<Long> durationMinutes = sessions.stream()
-                .map(s -> lastMessageAt.get(s.getId())
-                        .map(last -> Duration.between(s.getStartedAt(), last).toMinutes())
-                        .orElse(null))
-                .filter(Objects::nonNull)
-                .toList();
-
-        return durationMinutes.isEmpty() ? null
-                : round1(durationMinutes.stream().mapToLong(Long::longValue).average().orElse(0));
-    }
-
-    //保留一位小数
-    private static Double round1(double value) {
-        return Math.round(value * 10.0) / 10.0;
-    }
     //判空
     private static long nvl(Long v){
         return v==null?0L:v;
