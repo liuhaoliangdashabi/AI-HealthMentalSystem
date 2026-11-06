@@ -1,5 +1,7 @@
 package org.example.aispringboot.controller;
 
+import com.alibaba.csp.sentinel.annotation.SentinelResource;
+import com.alibaba.csp.sentinel.slots.block.BlockException;
 import lombok.extern.slf4j.Slf4j;
 import org.example.aispringboot.DTO.response.AnalyticsOverviewResponseDTO;
 import org.example.aispringboot.DTO.response.UvTrendItem;
@@ -33,9 +35,21 @@ public class AnalyticsController {
 
     @RequireIdentity(adminOnly = true)
     @GetMapping("/overview")
+    @SentinelResource(value="analytics-overview",
+        blockHandler="overviewBlocked",fallback="overviewFallback")
     public Result<AnalyticsOverviewResponseDTO> getOverview() {
         log.debug("管理端看板总览请求");
         return Result.success(analyticsService.getOverview());
+    }
+
+    private static Result<AnalyticsOverviewResponseDTO> overviewBlocked(BlockException e){
+        log.warn("看板被限流/熔断拦阻：{}",e.getClass().getSimpleName());
+        return Result.success(AnalyticsOverviewResponseDTO.empty());
+    }
+
+    private static Result<AnalyticsOverviewResponseDTO> overviewFallback(Throwable t){
+        log.warn("看板降级",t);
+        return Result.success(AnalyticsOverviewResponseDTO.empty());
     }
 
     /** 前端暂时没用到，但服务层写好了，顺手接出来，省得以后再来改这个文件 */

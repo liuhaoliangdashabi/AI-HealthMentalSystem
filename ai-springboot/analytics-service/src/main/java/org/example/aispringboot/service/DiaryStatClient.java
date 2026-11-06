@@ -3,21 +3,29 @@ package org.example.aispringboot.service;
 import lombok.extern.slf4j.Slf4j;
 import org.example.aispringboot.DTO.response.DiaryStatDTO;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+
+import java.net.http.HttpClient;
+import java.time.Duration;
 
 @Slf4j
 @Component
 public class DiaryStatClient {
-    private final RestClient rest= RestClient.create();
+    private final RestClient rest;
 
-    @Value("${internal.diary-service.url:http://127.0.0.1:8030}")
-    private String baseUrl;
+    public DiaryStatClient(RestClient.Builder builder,
+                           @Value("${internal.diary-service.url:http://diary-service}")String baseUrl) {
+        this.rest=builder.baseUrl(baseUrl).build();
+    }
 
     public DiaryStatDTO fetch(int days){
         try{
             DiaryStatDTO dto=rest.get()
-                    .uri(baseUrl+"/internal/diary/stats/overview?days="+days)
+                    .uri(uriBuilder ->
+                            uriBuilder.path("/internal/diary/stats/overview")
+                                    .queryParam("days",days).build())
                     .retrieve()
                     .body(DiaryStatDTO.class);
             return dto==null?DiaryStatDTO.empty():dto;

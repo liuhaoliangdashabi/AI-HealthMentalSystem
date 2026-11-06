@@ -4,21 +4,27 @@ import lombok.extern.slf4j.Slf4j;
 import org.example.aispringboot.DTO.response.ConsultStatDTO;
 import org.example.aispringboot.DTO.response.DiaryStatDTO;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClient;import java.net.http.HttpClient;import java.time.Duration;
 
 @Slf4j
 @Component
 public class ConsultStatClient {
-    private final RestClient rest= RestClient.create();
+    private final RestClient rest;
 
-    @Value("${internal.consult-service.url:http://127.0.0.1:8040}")
-    private String baseUrl;
+    public ConsultStatClient(RestClient.Builder builder,
+                             @Value("${internal.consult-service.url:http://consult-service}")String baseUrl) {
+        this.rest=builder.baseUrl(baseUrl).build();
+
+    }
 
     public ConsultStatDTO fetch(int days){
         try{
             ConsultStatDTO dto=rest.get()
-                    .uri(baseUrl+"/internal/consult/stats/overview?days="+days)
+                    .uri(uriBuilder ->
+                        uriBuilder.path("/internal/consult/stats/overview")
+                                .queryParam("days",days).build())
                     .retrieve()
                     .body(ConsultStatDTO.class);
             return dto==null?ConsultStatDTO.empty():dto;
@@ -27,4 +33,11 @@ public class ConsultStatClient {
             return ConsultStatDTO.empty();
         }
     }
+//    private static RestClient buildRest(){
+//        HttpClient http=HttpClient.newBuilder()
+//                .connectTimeout(Duration.ofMillis(500)).build();
+//        JdkClientHttpRequestFactory f=new JdkClientHttpRequestFactory(http);
+//        f.setReadTimeout(Duration.ofMillis(1500));
+//        return RestClient.builder().requestFactory(f).build();
+//    }
 }

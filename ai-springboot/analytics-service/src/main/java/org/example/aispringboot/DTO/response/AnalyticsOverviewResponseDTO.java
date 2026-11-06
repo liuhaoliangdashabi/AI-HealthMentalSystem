@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Data
@@ -76,5 +77,14 @@ public class AnalyticsOverviewResponseDTO {
         private Long newUsers;
         private Long diaryUsers;
         private Long consultationUsers;
+    }
+
+    public static AnalyticsOverviewResponseDTO empty(){
+        AnalyticsOverviewResponseDTO d=new AnalyticsOverviewResponseDTO();
+        d.systemOverview=new SystemOverview();
+        d.consultationStats=new ConsultationStats();
+        d.emotionTrend=new ArrayList<>();
+        d.userActivity=new ArrayList<>();
+        return d;
     }
 }

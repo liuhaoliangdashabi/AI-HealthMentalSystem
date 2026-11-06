@@ -3,8 +3,12 @@ package org.example.aispringboot.service;
 import lombok.extern.slf4j.Slf4j;
 import org.example.aispringboot.DTO.response.UserStatDTO;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+
+import java.net.http.HttpClient;
+import java.time.Duration;
 
 /**
  * 调 user-service 的内部接口拿用户统计。
@@ -17,16 +21,22 @@ import org.springframework.web.client.RestClient;
 @Slf4j
 @Component
 public class UserStatClient {
+    private final RestClient rest;
 
-    private final RestClient rest = RestClient.create();
+    public UserStatClient(RestClient.Builder builder,
+                          @Value("${internal.user-service.url:http://user-service}")String baseUrl) {
+        this.rest=builder.baseUrl(baseUrl).build();
+    }
 
-    @Value("${internal.user-service.url:http://127.0.0.1:8050}")
-    private String baseUrl;
+//    @Value("${internal.user-service.url:http://127.0.0.1:8050}")
+//    private String baseUrl;
 
     public UserStatDTO fetch(int days) {
         try {
             UserStatDTO dto = rest.get()
-                    .uri(baseUrl + "/internal/user/stats?days=" + days)
+                    .uri(uriBuilder ->
+                            uriBuilder.path("/internal/user/stats")
+                                    .queryParam("days",days).build())
                     .retrieve()
                     .body(UserStatDTO.class);
             return dto == null ? UserStatDTO.empty() : dto;
@@ -35,4 +45,5 @@ public class UserStatClient {
             return UserStatDTO.empty();
         }
     }
+
 }

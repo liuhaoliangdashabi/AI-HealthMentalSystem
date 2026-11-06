@@ -11,6 +11,10 @@ spring:
         server-addr: 127.0.0.1:8848
         namespace: dev
         group: dev
+    sentinel:
+      transport:
+        dashboard: localhost:8858
+      eager: true
   data:
     redis:
       sentinel:
@@ -37,11 +41,11 @@ logging:
     org.example.aispringboot.util: debug
 internal:
   diary-service:
-    url: http://127.0.0.1:8030
+    url: http://diary-service
   consult-service:
-    url: http://127.0.0.1:8040
+    url: http://consult-service
   user-service:
-    url: http://127.0.0.1:8050
+    url: http://user-service
 ---
 #模拟生产环境
 spring:
