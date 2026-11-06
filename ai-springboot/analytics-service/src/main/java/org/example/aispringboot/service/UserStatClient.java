@@ -1,5 +1,6 @@
 package org.example.aispringboot.service;
 
+import com.alibaba.csp.sentinel.Tracer;
 import lombok.extern.slf4j.Slf4j;
 import org.example.aispringboot.DTO.response.UserStatDTO;
 import org.springframework.beans.factory.annotation.Value;
@@ -41,6 +42,7 @@ public class UserStatClient {
                     .body(UserStatDTO.class);
             return dto == null ? UserStatDTO.empty() : dto;
         } catch (Exception e) {
+            Tracer.trace(e);
             log.error("调 user-service 取用户统计失败，看板数字会偏小，检查 8050 是否在跑", e);
             return UserStatDTO.empty();
         }

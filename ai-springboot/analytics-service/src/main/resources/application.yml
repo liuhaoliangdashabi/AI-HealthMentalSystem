@@ -14,6 +14,15 @@ spring:
     sentinel:
       transport:
         dashboard: localhost:8858
+      datasource:
+        flow:
+          nacos:
+            server-addr: 127.0.0.1:8848
+            namespace: dev
+            group-id: dev
+            data-id: analytics-sentinel-degrade.json
+            data-type: json
+            rule-type: degrade
       eager: true
   data:
     redis:

@@ -1,12 +1,11 @@
 package org.example.aispringboot.service;
 
+import com.alibaba.csp.sentinel.Tracer;
 import lombok.extern.slf4j.Slf4j;
 import org.example.aispringboot.DTO.response.ConsultStatDTO;
-import org.example.aispringboot.DTO.response.DiaryStatDTO;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestClient;import java.net.http.HttpClient;import java.time.Duration;
+import org.springframework.web.client.RestClient;
 
 @Slf4j
 @Component
@@ -29,6 +28,7 @@ public class ConsultStatClient {
                     .body(ConsultStatDTO.class);
             return dto==null?ConsultStatDTO.empty():dto;
         }catch (Exception e){
+            Tracer.trace(e);
             log.error("调consult-service取统计失败，看板数字偏小，去检查8040是否在跑",e);
             return ConsultStatDTO.empty();
         }

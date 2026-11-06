@@ -18,6 +18,8 @@ public class AnalyticsOverviewResponseDTO {
     private List<EmotionTrendItem> emotionTrend;
     private List<UserActivityItem> userActivity;
 
+    private boolean degraded=false;
+
     //系统总览
     @Data
     @Builder
@@ -77,6 +79,8 @@ public class AnalyticsOverviewResponseDTO {
         private Long newUsers;
         private Long diaryUsers;
         private Long consultationUsers;
+
+        private boolean degraded=false;
     }
 
     public static AnalyticsOverviewResponseDTO empty(){
@@ -85,6 +89,7 @@ public class AnalyticsOverviewResponseDTO {
         d.consultationStats=new ConsultationStats();
         d.emotionTrend=new ArrayList<>();
         d.userActivity=new ArrayList<>();
+        d.degraded=true;
         return d;
     }
 }

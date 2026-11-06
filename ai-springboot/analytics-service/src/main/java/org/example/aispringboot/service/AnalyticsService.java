@@ -37,7 +37,7 @@ public class AnalyticsService {
      * TTL 单独配 60 秒（见 CacheConfig）：看板能容忍 60 秒延迟，30 分钟会让人以为系统坏了。
      * 缓存只是降低频率，单次全表扫描的成本没变，表大了还是得让数据库做聚合。
      */
-    @Cacheable(cacheNames = "analytics", key = "'overview'")
+    @Cacheable(cacheNames = "analytics", key = "'overview'",unless="#result.degraded")
     public AnalyticsOverviewResponseDTO getOverview() {
         UserStatDTO userStat=userStatClient.fetch(RECENT_DAYS);
         DiaryStatDTO diaryStat=diaryStatClient.fetch(RECENT_DAYS);
@@ -88,8 +88,10 @@ public class AnalyticsService {
         ConsultationStats consultationStats = AnalyticsConvert.toConsultationStats(
                 consultStat.getTotal(),consultStat.getAvgDurationMinutes(), dailyTrend);
 
-        return AnalyticsConvert.toResponse(systemOverview, consultationStats,
+        AnalyticsOverviewResponseDTO resp=AnalyticsConvert.toResponse(systemOverview, consultationStats,
                 emotionTrend, userActivity);
+        resp.setDegraded(userStat.isDegraded()||diaryStat.isDegraded()||consultStat.isDegraded());
+        return resp;
     }
 
     /**

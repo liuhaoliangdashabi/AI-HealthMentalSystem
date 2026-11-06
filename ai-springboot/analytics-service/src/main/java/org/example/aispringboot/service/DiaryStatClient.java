@@ -1,5 +1,6 @@
 package org.example.aispringboot.service;
 
+import com.alibaba.csp.sentinel.Tracer;
 import lombok.extern.slf4j.Slf4j;
 import org.example.aispringboot.DTO.response.DiaryStatDTO;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,6 +31,7 @@ public class DiaryStatClient {
                     .body(DiaryStatDTO.class);
             return dto==null?DiaryStatDTO.empty():dto;
         }catch (Exception e){
+            Tracer.trace(e);
             log.error("调diary-service取统计失败，看板数字偏小，去检查8030是否在跑",e);
             return DiaryStatDTO.empty();
         }
