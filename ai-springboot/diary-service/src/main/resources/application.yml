@@ -59,3 +59,8 @@ mybatis-plus:
 oss:
   region: cn-beijing
   bucket: mental-health-ai-assistant
+
+rocketmq:
+  name-server: 127.0.0.1:9876
+  producer:
+    group: diary-producer-group

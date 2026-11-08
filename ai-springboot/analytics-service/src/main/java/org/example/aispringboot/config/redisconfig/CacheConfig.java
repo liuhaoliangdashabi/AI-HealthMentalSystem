@@ -51,6 +51,10 @@ public class CacheConfig implements CachingConfigurer {
                 //看板要求 60 秒内能看到变化，30 分钟的延迟会让人以为系统坏了
                 .withCacheConfiguration("analytics",
                         cfg.entryTtl(Duration.ofSeconds(60)))
+                //stat 是分片缓存：每个下游服务一格（user/diary/consult 各自的 key 前缀），
+                //一格挂了只让那一格降级，其他格照常命中；恢复后 60 秒内自动吃回真值
+                .withCacheConfiguration("stat",
+                        cfg.entryTtl(Duration.ofSeconds(60)))
                 .build();
     }
 

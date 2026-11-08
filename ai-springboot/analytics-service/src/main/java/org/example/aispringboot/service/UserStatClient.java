@@ -4,6 +4,7 @@ import com.alibaba.csp.sentinel.Tracer;
 import lombok.extern.slf4j.Slf4j;
 import org.example.aispringboot.DTO.response.UserStatDTO;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -32,6 +33,8 @@ public class UserStatClient {
 //    @Value("${internal.user-service.url:http://127.0.0.1:8050}")
 //    private String baseUrl;
 
+    /** 缓存名 stat，TTL 60 秒。key 带 days，unless 挡掉降级空壳。 */
+    @Cacheable(cacheNames = "stat", key = "'user:' + #days", unless = "#result.degraded")
     public UserStatDTO fetch(int days) {
         try {
             UserStatDTO dto = rest.get()

@@ -4,6 +4,7 @@ import com.alibaba.csp.sentinel.Tracer;
 import lombok.extern.slf4j.Slf4j;
 import org.example.aispringboot.DTO.response.ConsultStatDTO;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -18,6 +19,11 @@ public class ConsultStatClient {
 
     }
 
+    /**
+     * 缓存名 stat，TTL 60 秒。key 带 days 防止不同窗口串数据；
+     * unless 把降级空壳挡在缓存外，服务恢复后立刻能吃到真值。
+     */
+    @Cacheable(cacheNames = "stat", key = "'consult:' + #days", unless = "#result.degraded")
     public ConsultStatDTO fetch(int days){
         try{
             ConsultStatDTO dto=rest.get()

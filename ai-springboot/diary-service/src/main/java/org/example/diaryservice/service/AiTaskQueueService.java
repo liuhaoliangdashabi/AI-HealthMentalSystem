@@ -1,11 +1,16 @@
 package org.example.diaryservice.service;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.rocketmq.client.producer.SendCallback;
+import org.apache.rocketmq.client.producer.SendResult;
+import org.apache.rocketmq.spring.core.RocketMQTemplate;
 import org.example.diaryservice.util.RedisKeys;
+import org.example.diaryservice.util.RocketMQUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.util.Map;
 
 /**
@@ -22,7 +27,7 @@ import java.util.Map;
 @Service
 public class AiTaskQueueService {
     @Autowired
-    private StringRedisTemplate redis;
+    private RocketMQTemplate rocketMQTemplate;
 
     /**
      * 投递日记分析任务。
@@ -30,14 +35,17 @@ public class AiTaskQueueService {
      * 拆两条 Stream 就得维护两套兜底逻辑。
      */
     public void enqueueDiaryAnalysis(Long diaryId){
-        try{
-            redis.opsForStream().add(RedisKeys.AI_TASK_STREAM, Map.of(
-                    "type","DIARY_ANALYSIS",
-                    "diaryId",String.valueOf(diaryId)
-            ));
-        }catch (Exception e){
-            //日记已经落库了，分析只是锦上添花 —— 投递失败不能把用户的提交搞挂
-            log.error("投递日记分析任务失败，日记{}不会自动分析",diaryId,e);
-        }
+        rocketMQTemplate.asyncSend("ai-task:"+ RocketMQUtil.TAG_DIARY,String.valueOf(diaryId), new SendCallback(){
+
+                    @Override
+                    public void onSuccess(SendResult sendResult) {
+                        log.debug("投递成功，msgId={}",sendResult.getMsgId());
+                    }
+
+                    @Override
+                    public void onException(Throwable e) {
+                        log.error("投递失败，日记已落库但AI任务没排上",e);
+                    }
+                });
     }
 }

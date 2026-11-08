@@ -33,11 +33,13 @@ public class AnalyticsService {
     private StringRedisTemplate redis;
 
     /**
-     * 管理端数据看板总览。四张表全量捞进内存再聚合，很贵，所以必须走缓存。
-     * TTL 单独配 60 秒（见 CacheConfig）：看板能容忍 60 秒延迟，30 分钟会让人以为系统坏了。
-     * 缓存只是降低频率，单次全表扫描的成本没变，表大了还是得让数据库做聚合。
+     * 管理端数据看板总览。
+     * <p>
+     * 这里不再cache整个返回值，缓存下沉到三个 StatClient（cacheName=stat，各自一格）。
+     * 原因：整块缓存一旦命中，某个下游挂了也看不出来，恢复后还要等整块 TTL 到期；
+     * 分片后一格故障只影响那一格，另外两格照常命中，恢复后 60 秒内自动吃回真值。
+     * 代价是组装逻辑（30 次 HLL + 循环）每次都要跑一遍，实测几十毫秒，可以接受。
      */
-    @Cacheable(cacheNames = "analytics", key = "'overview'",unless="#result.degraded")
     public AnalyticsOverviewResponseDTO getOverview() {
         UserStatDTO userStat=userStatClient.fetch(RECENT_DAYS);
         DiaryStatDTO diaryStat=diaryStatClient.fetch(RECENT_DAYS);
