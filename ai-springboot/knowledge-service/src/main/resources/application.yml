@@ -45,3 +45,15 @@ mybatis-plus:
 oss:
   region: cn-beijing
   bucket: mental-health-ai-assistant
+
+seata:
+  application-id: knowledge-service
+  tx-service-group: default_tx_group
+  enable-auto-data-source-proxy: true
+  registry:
+    type: file
+  service:
+    vgroup-mapping:
+      default_tx_group: default
+    grouplist:
+      default: 127.0.0.1:8091

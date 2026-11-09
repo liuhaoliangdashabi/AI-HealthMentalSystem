@@ -1,5 +1,6 @@
 package org.example.userservice;
 
+import org.springframework.cloud.openfeign.EnableFeignClients;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
@@ -10,6 +11,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * GlobalExceptionHandler 都在那儿。漏了的话 @RequireIdentity 不生效且异常不会被统一处理，
  * 这个坑 consult 已经踩过一次。
  */
+@EnableFeignClients
 @SpringBootApplication(scanBasePackages = {"org.example.userservice", "org.example.common"})
 public class UserServiceApplication {
 

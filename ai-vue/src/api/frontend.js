@@ -72,6 +72,11 @@ export const updateProfile=(data)=>{
     return service.put('/user/profile',data)
 }
 
+//注销账号。后端会级联删掉日记、AI 会话、文章，删完这个 token 就指向一个不存在的用户了
+export const deleteAccount=(id)=>{
+    return service.delete(`/user/${id}`)
+}
+
 //上传文件。默认 timeout 只有 5 秒，图片上传要放宽
 //signal 用来中途取消：用户选错图了能立刻掐掉，不用干等
 export const uploadFile=(formData,signal)=>{

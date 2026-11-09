@@ -111,4 +111,13 @@ public class UserController {
         log.debug("Id={}修改个人资料", userId);
         return Result.success(userService.updateProfile(userId, commandDTO));
     }
+
+    @DeleteMapping("/user/{id}")
+    public Result<Void> deleteUser(@RequestHeader(name=IdentityUtil.HEADER_USER_ID)Long userId,
+                                   @RequestHeader(name=IdentityUtil.HEADER_USER_ROLE)Integer roleType,
+                                   @PathVariable("id")Long targetId){
+        log.info("Id={}要注销Id={},roleType={}",userId,targetId,roleType);
+        userService.deleteById(userId,targetId,roleType);
+        return Result.success();
+    }
 }

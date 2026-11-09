@@ -63,6 +63,12 @@
             <version>${rocketmq-spring-boot-starter.version}</version>
         </dependency>
 
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-seata</artifactId>
+        </dependency>
+
+
         <!-- 日记 AI 分析要用模型 -->
         <dependency>
             <groupId>cn.hutool</groupId>

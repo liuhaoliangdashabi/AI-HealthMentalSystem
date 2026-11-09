@@ -70,6 +70,21 @@
             <version>${hutool.version}</version>
         </dependency>
 
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-seata</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+        </dependency>
+
         <!-- 头像：库里存 objectKey，出参时拼成完整 URL -->
         <dependency>
             <groupId>com.aliyun</groupId>

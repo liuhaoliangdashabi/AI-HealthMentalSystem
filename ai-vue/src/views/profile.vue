@@ -164,8 +164,16 @@
             </el-form>
 
             <template #footer>
-                <el-button @click="editVisible = false">取消</el-button>
-                <el-button type="primary" :loading="saving" @click="submitEdit">保存</el-button>
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                    <!-- 禁用态：自己删自己可以，管理员删不了另一个管理员（后端 SQL 条件兜底） -->
+                    <el-button type="danger" text :loading="deleting" @click="handleDeleteAccount">
+                        注销账号
+                    </el-button>
+                    <div>
+                        <el-button @click="editVisible = false">取消</el-button>
+                        <el-button type="primary" :loading="saving" @click="submitEdit">保存</el-button>
+                    </div>
+                </div>
             </template>
         </el-dialog>
     </div>
@@ -173,10 +181,10 @@
 
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Message, Calendar, Loading, EditPen, Iphone, Present } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
-import { getUserActivity, updateAvatar, uploadFile, updateProfile } from '@/api/frontend'
+import { getUserActivity, updateAvatar, uploadFile, updateProfile, deleteAccount } from '@/api/frontend'
 import { useUserStore } from '@/stores/user'
 
 //用户信息放 store：顶栏和个人主页读同一个 ref，这边换完头像那边立刻跟着变
@@ -432,11 +440,55 @@ const submitEdit = async () => {
     }
 }
 
+//=================== 注销账号 ===================
+const deleting = ref(false)
+
+/**
+ * 注销是不可逆的：用户、日记、AI 会话、文章一起没。
+ * 所以必须过一次确认框，而且文案要把"会删什么"说清楚，不能只写"确定吗"。
+ * 验证码后面再加，先只做二次确认。
+ */
+const handleDeleteAccount = async () => {
+    try {
+        await ElMessageBox.confirm(
+            '注销后，你的日记、AI 对话记录、已发布的文章会一并删除，且无法恢复。',
+            '确定要注销账号吗？',
+            {
+                type: 'warning',
+                confirmButtonText: '确认注销',
+                cancelButtonText: '再想想',
+                confirmButtonClass: 'el-button--danger'
+            }
+        )
+    } catch (e) {
+        return   //点了取消或右上角关闭
+    }
+
+    if (!user.value.id) {
+        ElMessage.error('拿不到用户 ID，请刷新页面重试')
+        return
+    }
+
+    deleting.value = true
+    try {
+        await deleteAccount(user.value.id)
+        ElMessage.success('账号已注销')
+        //用户已经不存在了，token 留着只会一直 401，直接清干净回登录页
+        localStorage.removeItem('token')
+        localStorage.removeItem('userInfo')
+        userStore.clear()
+        setTimeout(() => { window.location.href = '/auth/login' }, 600)
+    } catch (err) {
+        //拦截器已经统一弹过错误提示了
+    } finally {
+        deleting.value = false
+    }
+}
+
 onMounted(() => {
     userStore.load()
     loadActivity()
-})
-</script>
+})</script>
 
 <style lang="scss" scoped>
 .profile-page {

@@ -307,5 +307,14 @@ public class ArticleService {
                 :ossDomain;
         return base+"/"+objectKey.replaceAll("^/+","");
     }
+
+    @CacheEvict(cacheNames={"article","articleHot"},allEntries = true)
+    public int deleteById(Long targetId) {
+        int rows=articleMapper.delete(
+                new LambdaQueryWrapper<KnowledgeArticle>()
+                        .eq(KnowledgeArticle::getAuthorId,targetId));
+        log.info("user{}注销，删除文章{}篇",targetId,rows);
+        return rows;
+    }
 }
 

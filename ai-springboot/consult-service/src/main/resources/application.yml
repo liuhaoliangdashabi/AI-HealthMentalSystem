@@ -57,3 +57,20 @@ mybatis-plus:
 oss:
   region: cn-beijing
   bucket: mental-health-ai-assistant
+
+rocketmq:
+  name-server: 127.0.0.1:9876
+  producer:
+    group: consult-producer-group
+
+seata:
+  application-id: consult-service
+  tx-service-group: default_tx_group
+  enable-auto-data-source-proxy: true
+  registry:
+    type: file
+  service:
+    vgroup-mapping:
+      default_tx_group: default
+    grouplist:
+      default: 127.0.0.1:8091

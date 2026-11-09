@@ -6,7 +6,9 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.seata.spring.annotation.GlobalTransactional;
 import org.example.common.BusinessException;
+import org.example.common.util.IdentityUtil;
 import org.example.userservice.DTO.command.UserLoginCommandDTO;
 import org.example.userservice.DTO.command.UserProfileUpdateCommandDTO;
 import org.example.userservice.DTO.command.UserRegisterCommandDTO;
@@ -14,6 +16,9 @@ import org.example.userservice.DTO.response.UserLoginResponseDTO;
 import org.example.userservice.entity.User;
 import org.example.userservice.enumClass.UserType;
 import org.example.userservice.mapper.UserMapper;
+import org.example.userservice.service.client.ConsultClient;
+import org.example.userservice.service.client.DiaryClient;
+import org.example.userservice.service.client.KnowledgeClient;
 import org.example.userservice.service.convert.UserConvert;
 import org.example.userservice.util.JwtTokenUtil;
 import org.example.userservice.util.OSSUtil;
@@ -49,6 +54,12 @@ public class UserService {
     private StringRedisTemplate redis;
     @Autowired
     private OSSUtil ossUtil;
+    @Autowired
+    private ConsultClient consultClient;
+    @Autowired
+    private DiaryClient diaryClient;
+    @Autowired
+    private KnowledgeClient knowledgeClient;
 
     public UserService(BCryptPasswordEncoder passwordEncoder,
                        JwtTokenUtil jwtTokenUtil,
@@ -278,6 +289,28 @@ public class UserService {
         }catch(Exception e){
             log.warn("登录超限,用户名username={}加入黑名单失败，赶快修复",username,e);
         }
+    }
+
+
+    @CacheEvict(cacheNames = "user",key="#targetId")
+    @GlobalTransactional(name="del-user",rollbackFor = Exception.class)
+    public void deleteById(Long userId, Long targetId, Integer roleType) {
+        User target=userMapper.selectById(targetId);
+        if(target==null)throw new BusinessException("你要寻找的用户不存在");
+        if(!userId.equals(targetId) && !IdentityUtil.isAdmin(roleType))
+            throw new BusinessException("你无权注销该账号");
+        if(!userId.equals(targetId) && IdentityUtil.isAdmin(target.getUserType()))
+            throw new BusinessException("不能注销其他管理员账号!管理员也不行!!");
+
+        //还有个共有的：删除头像，似乎只需要调用File的异步处理(?)
+
+        //不按角色判断有没有数据，三个下游一律清一遍，删 0 条也无所谓
+        knowledgeClient.deleteById(userId,targetId);
+        consultClient.deleteById(userId,targetId);
+        diaryClient.deleteById(userId,targetId);
+
+        //全部完成后就删除user
+        userMapper.deleteById(targetId);
     }
 
     /**

@@ -247,6 +247,15 @@ public class DiaryService {
         }
     }
 
+    @CacheEvict(cacheNames = "activity",allEntries = true)
+    public int deleteById(Long targetId) {
+        int rows=emotionDiaryMapper.delete(
+                new LambdaQueryWrapper<EmotionDiary>()
+                        .eq(EmotionDiary::getUserId,targetId));
+        log.info("user{}注销删除日记{}条",targetId,rows);
+        return rows;
+    }
+
 //    /** 个人主页贡献日历：最近 days 天每天一条记录。只 select 三列，日历只要颜色，正文不用查。 */
 //    public List<UserActivityItem> listRecentActivity(Long userId, int days){
 //        if(userId==null)return List.of();

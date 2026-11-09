@@ -17,23 +17,9 @@ public class RedisKeys {
         return "uv:empty:" + day;
     }
 
-    //========== AI 任务队列（Stream）==========
-
-    //完整 key，末尾不加冒号
-    public static final String AI_TASK_STREAM="stream:ai:task";
-
-    //重试超过上限的任务转到死信，人工排查用
-    public static final String AI_TASK_DEAD_STREAM="stream:ai:task:dead";
-
-    //消费者组名：逻辑身份，永远不变。实例身份用 consumerName 区分
-    public static final String AI_TASK_GROUP="ai-workers";
-    public static final String CONSULT_TASK_GROUP="consult-workers";
-
-    //8030 自己的组名。和 web 的 ai-workers 是两个独立 group，各有独立 PEL。
-    //同一条 Stream 上两种 type 混着放，两个 group 都会读到全部消息，
-    //各自只处理自己的 type，遇到别人的直接在本地 ACK 丢掉 —— 这不叫"重复消费"，
-    //因为被丢掉的那条本来就不归它管。真正的重复消费是指同一 type 被处理两次。
-    public static final String DIARY_TASK_GROUP="diary-workers";
+    // AI 任务队列已迁到 RocketMQ（见 RocketMQUtil.TAG_EMOTION）：
+    // 重试、死信、堆积都由 broker 管，这里不再需要 stream/group 常量。
+    // 旧的 stream:ai:task 里历史消息已全部 ACK（lag=0），可以直接忽略。
 
     //========== AI 情绪分析结果缓存（String + JSON）==========
 

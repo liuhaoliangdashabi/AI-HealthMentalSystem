@@ -185,5 +185,25 @@ public class KnowledgeConsultationService {
             throw new BusinessException(ResultCode.AUTHORIZED_ERROR.getCode(),"用户无权访问该会话",null);
         }
     }
+
+    @Transactional(rollbackFor = Exception.class)
+    public int deleteByUserId(Long targetId) {
+        List<Long> sessionIds=sessionMapper.selectObjs(
+                new LambdaQueryWrapper<ConsultationSession>()
+                        .select(ConsultationSession::getId)
+                        .eq(ConsultationSession::getUserId,targetId)).stream()
+                .map(i->(Long)i).toList();
+
+        int mesrow=0;
+        if(!sessionIds.isEmpty()){
+            mesrow=messageMapper.delete(new LambdaQueryWrapper<ConsultationMessage>()
+                    .in(ConsultationMessage::getSessionId,sessionIds));
+        }
+
+        int sesrow=sessionMapper.delete(new LambdaQueryWrapper<ConsultationSession>()
+                .eq(ConsultationSession::getUserId,targetId));
+        log.info("注销用户{}的会话{}个，信息{}条",targetId,sesrow,mesrow);
+        return sesrow;
+    }
 }
 

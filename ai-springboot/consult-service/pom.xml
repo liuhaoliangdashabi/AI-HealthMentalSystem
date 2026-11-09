@@ -71,6 +71,20 @@
         </dependency>
 
         <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-seata</artifactId>
+        </dependency>
+
+        <!-- AI 情绪分析任务改用 RocketMQ，和 diary-service 保持一致。
+             版本由父 pom 的 rocketmq-spring-boot-starter.version 管 -->
+        <dependency>
+            <groupId>org.apache.rocketmq</groupId>
+            <artifactId>rocketmq-spring-boot-starter</artifactId>
+            <version>${rocketmq-spring-boot-starter.version}</version>
+        </dependency>
+
+
+        <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <optional>true</optional>
