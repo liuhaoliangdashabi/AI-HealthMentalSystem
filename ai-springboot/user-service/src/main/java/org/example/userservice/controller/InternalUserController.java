@@ -51,10 +51,7 @@ public class InternalUserController {
         return result;
     }
 
-    /**
-     * B 端看板要的两个数：总用户数 + 最近 N 天每日新增。
-     * 合成一个接口，省一次往返；调用方本来就 60 秒缓存，不怕它贵。
-     */
+    //B 端看板要的两个数：总用户+最近几天每日新增。
     @GetMapping("/stats")
     public Map<String, Object> stats(@RequestParam(defaultValue = "30") int days) {
         Map<String, Object> result = new HashMap<>();

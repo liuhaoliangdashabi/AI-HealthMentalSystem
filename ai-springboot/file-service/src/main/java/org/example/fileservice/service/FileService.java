@@ -1,7 +1,11 @@
 package org.example.fileservice.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.core.toolkit.support.SFunction;
 import lombok.extern.slf4j.Slf4j;
 
+import org.example.common.BusinessException;
 import org.example.fileservice.entity.SysFileInfo;
 import org.example.fileservice.mapper.FileMapper;
 import org.example.fileservice.util.OSSUtil;
@@ -13,6 +17,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Locale;
+
 @Slf4j
 @Service
 public class FileService {
@@ -35,28 +41,9 @@ public class FileService {
 
     public String upload(MultipartFile file,String businessType,String businessId,
                          String businessField, Long userId) {
-        String md5=null;
-        try(InputStream in=file.getInputStream()){
-            md5=DigestUtils.md5DigestAsHex(in);
-        } catch (IOException e) {
-            log.warn("计算文件md5失败，退化为普通上传",e);
-        }
-        String objectKey=null;
-        if (md5!=null) {
-            try{
-                objectKey=redis.opsForValue().get(FILE_MD5_PREFIX+md5);
-            }catch(Exception e){
-                log.warn("获取文件缓存失败，正常上传,md5={}",md5,e);
-            }
-        }
-        boolean cacheHit=objectKey!=null;
-        if(cacheHit){
-            log.info("秒传命中，md5={}，objectKey={}",md5,objectKey);
-        }else{
-            objectKey=ossUtil.upload(file,businessType.toLowerCase());
-        }
-        try {
-            SysFileInfo info= SysFileInfo.builder()
+        String objectKey=ossUtil.upload(file,businessType.toLowerCase());
+        try{
+            fileMapper.insert(SysFileInfo.builder()
                     .originalName(file.getOriginalFilename())
                     .filePath(objectKey)
                     .fileSize(file.getSize())
@@ -68,31 +55,33 @@ public class FileService {
                     .isTemp(0)
                     .status(SysFileInfo.STATUS_NORMAL)
                     .createTime(LocalDateTime.now())
-                    .build();
-            fileMapper.insert(info);
-            if (cacheHit){
-                log.info("秒传命中文件，文件上传成功，objectKey={},field={}",objectKey,info.getId());
-            }else{
-                log.info("秒传未命中文件，但文件上传成功，objectKey={},fileId={}",objectKey,info.getId());
-            }
-        } catch (Exception e) {
-            if (cacheHit) {
-                //不能补偿删除，文件可能被别的记录引用着，删了会把别人搞挂
-                log.warn("秒传写库失败，放弃补偿，文件保留,md5={}",md5,e);
-            }else{
-                log.warn("写库失败，异步补偿，objectKey={}",objectKey,e);
-                fileCompensator.compensateDelete(objectKey);
-            }
-        }
-
-        //回填缓存
-        if(!cacheHit && md5!=null){
-            try{
-                redis.opsForValue().set(FILE_MD5_PREFIX+md5,objectKey,FILE_MD5_TTL);
-            }catch (Exception e){
-                log.warn("文件上传成功，但写秒传缓存失败，md5={}",md5,e);
-            }
+                    .build());
+        }catch(Exception e){
+            log.error("写库失败，已触发异步补偿,objectKey={}",objectKey,e);
+            fileCompensator.compensateDelete(objectKey);
+            //不能返回这个 key：补偿已经把 OSS 文件删了，库里也没有记录，
+            //调用方把它存进 user.avatar 就是一张永远 404 的图
+            throw new BusinessException("文件上传失败，请重试");
         }
         return objectKey;
+    }
+
+    public int markTempByUser(Long userId){
+        return fileMapper.update(null,new LambdaUpdateWrapper<SysFileInfo>()
+                .eq(SysFileInfo::getUploadUserId,userId)
+                .eq(SysFileInfo::getIsTemp,0)
+                .set(SysFileInfo::getIsTemp,1));
+    }
+
+    public int deleteByObjectKey(String objectKey,Long userId){
+        if(objectKey==null || objectKey.isBlank())return 0;
+        //不按 upload_user_id 过滤：文章封面可能是管理员代传的，按作者 id 匹配会 0 行、静默不删。
+        //秒传已关，一个 key 只对应一条记录，按 key 删是安全的；userId 只用于日志追溯。
+        int rows=fileMapper.delete(new LambdaQueryWrapper<SysFileInfo>()
+                .eq(SysFileInfo::getFilePath,objectKey));
+        if(rows>0 && !ossUtil.delete(objectKey)){
+            log.warn("记录已删但oss没删掉，需人工清理：{}",objectKey);
+        }
+        return rows;
     }
 }

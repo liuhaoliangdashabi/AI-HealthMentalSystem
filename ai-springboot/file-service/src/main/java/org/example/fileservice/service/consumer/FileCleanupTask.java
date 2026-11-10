@@ -60,7 +60,7 @@ public class FileCleanupTask {
 
             for(SysFileInfo o:orphans){
                 try{
-                    ossUtil.delete(o.getFilePath());
+                    if(!ossUtil.delete(o.getFilePath()))continue;
                     fileMapper.deleteById(o.getId());
                 }catch(Exception e){
                     log.warn("对账清除失败，下次再试",e);

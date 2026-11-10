@@ -17,6 +17,7 @@ import org.example.knowledgeservice.entity.KnowledgeCategory;
 import org.example.knowledgeservice.enumClass.ArticleStatus;
 import org.example.knowledgeservice.mapper.KnowledgeArticleMapper;
 import org.example.knowledgeservice.mapper.KnowledgeCategoryMapper;
+import org.example.knowledgeservice.service.client.FileClient;
 import org.example.knowledgeservice.service.convert.KnowledgeConvert;
 import org.example.knowledgeservice.util.RedisKeys;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,6 +46,8 @@ public class ArticleService {
     private ArticleContentService contentService;
     @Autowired
     private StringRedisTemplate redis;
+    @Autowired
+    private FileClient fileClient;
     @Value("${oss.bucket}")
     private String ossBucket;
     @Value("${oss.region}")
@@ -177,11 +180,23 @@ public class ArticleService {
             @CacheEvict(cacheNames = "articleHot", allEntries = true)
     })
     public void putArticleDetail(String articleId, @Valid ArticleCommandDTO commandDTO) {
+        //先拿旧值：updateById 之后 cover_image 就被覆盖成新值了，旧 key 再也查不回来
+        KnowledgeArticle old=articleMapper.selectById(articleId);
+        if(old==null){
+            log.warn("文章{}不存在",articleId);
+            throw new BusinessException("文章不存在");
+        }
         KnowledgeArticle entity=KnowledgeConvert.toUpdateEntity(articleId,commandDTO);
         int count=articleMapper.updateById(entity);
         if(count==0){
             log.warn("文章{}不存在",articleId);
             throw new BusinessException("文章不存在");
+        }
+        //只在这三件事同时成立时清旧图：带了新封面、非空白、而且确实和旧值不同。
+        //第三点不能省 —— 前端编辑时常把当前封面原样回传，少了这个比较会把正在用的图删掉，直接破图
+        String newCover=commandDTO.getCoverImage();
+        if(newCover!=null && !newCover.isBlank() && !newCover.equals(old.getCoverImage())){
+            deleteCover(old.getCoverImage(),old.getAuthorId(),articleId);
         }
         log.debug("文章已更新：articleId={}",articleId);
     }
@@ -191,10 +206,26 @@ public class ArticleService {
             @CacheEvict(cacheNames = "articleHot", allEntries = true)
     })
     public void deleteArticle(String articleId) {
-        int count=articleMapper.deleteById(articleId);
-        if(count==0){
+        KnowledgeArticle old=articleMapper.selectById(articleId);
+        if(old==null){
             log.warn("文章{}不存在",articleId);
             throw new BusinessException("文章不存在");
+        }
+        articleMapper.deleteById(articleId);
+        deleteCover(old.getCoverImage(),old.getAuthorId(),articleId);
+    }
+
+    /**
+     * 删封面图。只在库已经改完之后调用 —— 顺序反了就是「库回滚了、文件没了」的破图。
+     * 失败只留垃圾文件，不会破图，所以这里吞掉异常。
+     * 不包 @GlobalTransactional：为几张垃圾图付两阶段提交的代价不划算，而且 OSS 根本不在 Seata 管辖范围。
+     */
+    private void deleteCover(String objectKey,Long authorId,String articleId){
+        if(objectKey==null || objectKey.isBlank())return;
+        try{
+            fileClient.deleteByKey(objectKey,authorId==null?0L:authorId);
+        }catch(Exception e){
+            log.warn("旧封面清理失败，留下孤儿文件，articleId={}, key={}",articleId,objectKey,e);
         }
     }
 

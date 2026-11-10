@@ -18,6 +18,7 @@ import org.example.userservice.enumClass.UserType;
 import org.example.userservice.mapper.UserMapper;
 import org.example.userservice.service.client.ConsultClient;
 import org.example.userservice.service.client.DiaryClient;
+import org.example.userservice.service.client.FileClient;
 import org.example.userservice.service.client.KnowledgeClient;
 import org.example.userservice.service.convert.UserConvert;
 import org.example.userservice.util.JwtTokenUtil;
@@ -60,6 +61,8 @@ public class UserService {
     private DiaryClient diaryClient;
     @Autowired
     private KnowledgeClient knowledgeClient;
+    @Autowired
+    private FileClient fileClient;
 
     public UserService(BCryptPasswordEncoder passwordEncoder,
                        JwtTokenUtil jwtTokenUtil,
@@ -255,7 +258,11 @@ public class UserService {
         //旧头像顺手删掉，别在 OSS 里攒垃圾。
         //delete 内部已经吞异常了，删失败不影响换头像本身。
         if(oldAvatar!=null && !oldAvatar.isBlank() && !oldAvatar.equals(newAvatar)){
-            ossUtil.delete(oldAvatar);
+            try{
+                fileClient.deleteByKey(oldAvatar,userId);
+            }catch (Exception e){
+                log.warn("旧头像删除失败，留下孤儿文件,userId={},avatar={}",userId,oldAvatar,e);
+            }
         }
         return ossUtil.getUrl(newAvatar);
     }
@@ -308,7 +315,8 @@ public class UserService {
         knowledgeClient.deleteById(userId,targetId);
         consultClient.deleteById(userId,targetId);
         diaryClient.deleteById(userId,targetId);
-
+        //按 targetId 打标，不是 userId：管理员注销别人时两者不同，用 userId 会标错人的图
+        fileClient.markTempByUser(targetId);
         //全部完成后就删除user
         userMapper.deleteById(targetId);
     }

@@ -62,6 +62,15 @@
             <artifactId>spring-cloud-starter-alibaba-seata</artifactId>
         </dependency>
 
+        <!-- 调 file-service 用：seata starter 只认 Feign，不传递这两个依赖 -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>org.projectlombok</groupId>

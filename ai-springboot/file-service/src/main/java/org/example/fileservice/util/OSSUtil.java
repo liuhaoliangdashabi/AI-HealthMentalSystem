@@ -109,12 +109,12 @@ public class OSSUtil {
     }
 
     /** 删除文件，换封面时清理旧的用。删失败不影响主流程，只记警告不抛异常。 */
-    public void delete(String objectKey) {
+    public boolean delete(String objectKey) {
         if (objectKey == null || objectKey.isBlank()) {
-            return;
+            return true;
         }
         if (objectKey.startsWith("http://") || objectKey.startsWith("https://")) {
-            return;   //完整 URL 的历史数据，不动
+            return true; //完整 URL 的历史数据，不动
         }
         try {
             ossClient.deleteObject(DeleteObjectRequest.newBuilder()
@@ -122,8 +122,10 @@ public class OSSUtil {
                     .key(stripLeadingSlash(objectKey))
                     .build());
             log.info("OSS 文件已删除：objectKey={}", objectKey);
+            return true;
         } catch (Exception e) {
             log.warn("删除 OSS 文件失败：objectKey={}", objectKey, e);
+            return false;
         }
     }
 
